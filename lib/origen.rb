@@ -163,6 +163,10 @@ unless defined? RGen::ORIGENTRANSITION
       end
       alias_method :application!, :app!
 
+      def has_plugin?(plugin)
+        _applications_lookup[:name][plugin.to_sym].nil? ? false : true
+      end
+
       # @api private
       def with_source_file(file)
         @current_source_dir = Pathname.new(file).dirname
@@ -726,6 +730,15 @@ unless defined? RGen::ORIGENTRANSITION
       # Returns the Origen LSF instance, not the lsf_manager. Use Origen.lsf for that
       def lsf!
         @lsf ||= Origen::Application::LSF.new
+      end
+
+      # Let's Origen know about any domain specific acronyms used with an application, this will cause
+      # them to be translated between underscored and camel-cased versions correctly
+      def register_acronym(name)
+        require 'active_support/core_ext/string/inflections'
+        ActiveSupport::Inflector.inflections(:en) do |inflect|
+          inflect.acronym(name)
+        end
       end
 
       private
