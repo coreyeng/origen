@@ -1,0 +1,255 @@
+% render "layouts/guides.html" do
+
+One thing you might have noticed is that <code>options</code> are everywhere. [Components]()
+have options, [Subblocks]() have options, the various [Tester Interfaces]()
+have options, lots of thinkg have options!
+
+Options are great; they really are. But, as you add your own classes, plugins, and applications, you
+may face a couple of complications when you start using and customizing your new assets. For example:
+
+* Typos can be deadly, and we've all been there. Few things are worse when trying to track down the elusive
+<code>Undefined method for NilClass</code> error caused by passing <code>my_descriptive_parameter</code> instead
+of the required <code>my_descriptive_param</code>. Or, just not getting the desired behavior and wondering why.
+* Keeping track of all the available options can be a mess. Even when all the options are documented, there's, again,
+chances for typos and miscommunication. There's also the usual case of the assets was updated but the documentation
+was not, leaving the two out of sync.
+
+
+Again, options are great. Not trying to knock the usage of options, but can we do better? Can we make this more
+user friendly?
+
+We can! <code>Origen::Optionable</code> provides just the API to help solve some of these problems.
+
+<code>Optionable</code> provides the <code>Origen::Optionable::Options</code> class. This class will hold all
+of your options and will handle storing, setting, and retrieving them for you.
+
+#### The Basics
+
+This is best shown through some examples. Consider the subblock:
+
+~~~ruby
+~~~
+
+So, from this, we can gather that subblock S1 has the static values
+
+~~~ruby
+~~~
+
+and the customizable options:
+
+~~~ruby
+~~~
+
+Using <code>Optionable</code>, we can register these options and set them up with some
+default values:
+
+~~~ruby
+~~~
+
+We can access the parameters we just added as:
+
+~~~ruby
+~~~
+
+But what if we try to access an option that doesn't exists? We'll get an exception:
+
+~~~ruby
+~~~
+
+Obvisouly setting default values using the provided method options isn't really what we're going for here. 
+So, what about setting options? You can set options in the following way:
+
+~~~ruby
+~~~
+
+And again, trying to set an option that doesn't exist raises an exception:
+
+~~~ruby
+~~~
+
+#### Option Criteria
+
+Say one of the parameters is a reset value for a register that changes from application to application. Our
+subblock will attempt to set an option :reset, whose value will be written to a :reset register. This would look
+like:
+
+~~~ruby
+~~~
+
+If the user enters a number, is all well. The register will be written. But, what if they give us an Array instead:
+
+~~~ruby
+~~~
+
+Well, that doesn't make any sense, and an exception will ensue complaining that we can't write a register with
+an array. But we really don't need to wait that long to know that it won't work. What we can do instead, is set
+some boundaries on what the :reset option can be upon setting. Failure to meet these criterion will throw an
+exception upon setting:
+
+~~~ruby
+~~~
+
+That is just one way to set boundaries. But what if this regsiter is actually an 8-bit field stored in a 32-bit
+register? Writing anything greater than 255 would also not make sense then. So, we can set an additional criteria:
+
+~~~ruby
+~~~
+
+Still not meeting your needs? Don't like the default error messages and want to set custom one? No problem! You can
+do both of those things:
+
+~~~ruby
+~~~
+
+Note that if you provide all the aforementioned boundaries, all will be checked.
+
+#### Other Operations
+
+In addition to adding and retrieving options, options can be removed, iterated over, and listed.
+
+#### Generating Documentation
+
+One of the functions of <code>Optionable</code> is to help keep what's actually in the code in sync with what is
+in the documentation. <code>Optionable::OptionHandler</code> has a method to generate an HTML string that can easily
+be embedded into the documentation.
+
+For example, if you have the options setup as:
+
+~~~ruby
+optionhandler = Origen::Optionable::OptionHandler.new
+
+optionhandler.add(:item1, default: "String Value", accepted_classes: [String, Symbol], description: "Item 1")
+optionhandler.add(:item2, default: [], accepted_classes: [Array], description: "Item 2")
+optionhandler.add(:item3, default: {}, accepted_classes: [Hash], description: "Item 3")
+~~~
+
+You can load up your application and call the <code>to_html</code> method:
+
+~~~
+optionhandler.to_html
+~~~
+
+To get the following:
+
+% optionhandler = Origen::Optionable::OptionHandler.new
+% optionhandler.add(:item1, default: "String Value", accepted_classes: [String, Symbol], description: "Item 1")
+% optionhandler.add(:item2, default: [], accepted_classes: [Array], description: "Item 2")
+% optionhandler.add(:item3, default: {}, accepted_classes: [Hash], description: "Item 3")
+
+<%= optionhandler.to_html %>
+
+##### Option Groups
+
+The above is sufficient if when you don't have that many options to deal with. However, if you have several options or 
+related options, you can use <code>Option Groups</code> to organize the option's menu.
+
+Consider the following options:
+
+~~~ruby
+optionhandler = Origen::Optionable::OptionHandler.new
+
+optionhandler.add(:item1_A, default: "Default", description: "Item 1")
+optionhandler.add(:item2_A, default: "Default", description: "Item 2")
+optionhandler.add(:item3_A, default: "Default", description: "Item 3")
+
+optionhandler.add(:item1_B, default: "Default", description: "Item 1")
+optionhandler.add(:item2_B, default: "Default", description: "Item 2")
+
+optionhandler.add(:item1_C, default: "Default", description: "Item 3")
+~~~
+
+These groups could most easily be split by their suffix, to get three item groups: <code>Items A</code>,
+<code>Items B</code>, and <code>Items C</code>.
+
+Do accomplish this, we will register a new option group on the option handler using the <code>add_option_group</code>
+method:
+
+~~~ruby
+# Define them one by one:
+option_handler.add_option_group("Items A", description: "Options concerning Item A")
+option_handler.add_option_group("Items B", description: "Options concerning Item B")
+option_handler.add_option_group("Items C", description: "Options concerning Item C")
+
+# Define them all at once:
+option_handler.add_option_group("Items A", {description: "Options concerning Item A"},
+                                "Items B", {description: "Options concerning Item B"},
+                                "Items C", {description: "Options concerning Item C"}
+                               )
+~~~
+
+Now, we can place the options we've already defined into these groups:
+
+~~~ruby
+# Set a single option
+option_handler.set_option_group(:item1_C, "Items C")
+
+# Set multiple options at once (Note the usage of an Array, not as multiple arguments
+option_handler.set_option_group([:item1_B, :item2_B], "Items B")
+option_handler.set_option_group([:item1_A, :item1_A, :item1_A], "Items A")
+
+# Trying to set an option that has not been added results in an exception
+
+# Trying to set an option that exists but whose item group has not been registered also results in an exception
+~~~
+
+Running the above will generate a one-layer, nested option menu:
+
+FILL THIS IN WITH EXAMPLE
+
+##### Further Nesting Option Groups
+
+The above only has a single-layer, but the only limitation on the number of nested groups is what your screen
+can adequately display.
+
+Option groups can be further nested by supplying an array as the option groups, whose tree will be read from
+the left-hand side to the right-hand side. Consider the following options:
+
+~~~ruby
+optionhandler = Origen::Optionable::OptionHandler.new
+
+optionhandler.add(:item1_A_i, default: "Default", description: "Item 1")
+optionhandler.add(:item2_A_ii, default: "Default", description: "Item 2")
+optionhandler.add(:item3_A_ii, default: "Default", description: "Item 3")
+optionhandler.add(:item4_A_ii, default: "Default", description: "Item 3")
+
+optionhandler.add(:item1_B_i, default: "Default", description: "Item 1")
+optionhandler.add(:item2_B_i, default: "Default", description: "Item 2")
+optionhandler.add(:item3_B_ii, default: "Default", description: "Item 1")
+optionhandler.add(:item4_B_ii, default: "Default", description: "Item 2")
+
+optionhandler.add(:item1_C, default: "Default", description: "Item 3")
+~~~
+
+Now it may make sense to first group them by letter, then by roman numeral. Using arrays as read
+from left to right, we can define the option groups as:
+
+~~~ruby
+option_handler.add_option_group("Items A", description: "Options concerning Item A")
+option_handler.add_option_group("Items B", description: "Options concerning Item B")
+option_handler.add_option_group("Items C", description: "Options concerning Item C")
+
+option_handler.add_option_group(["Items A", "Items i"], description: "Options concerning Item A, i")
+option_handler.add_option_group(["Items A", "Items ii"], description: "Options concerning Item A, ii")
+option_handler.add_option_group(["Items B", "Items i"], description: "Options concerning Item B, i")
+option_handler.add_option_group(["Items B", "Items ii"], description: "Options concerning Item B, ii")
+option_handler.add_option_group(["Items C"], description: "Options concerning Item C")
+~~~
+
+Then, add the options:
+
+~~~ruby
+option_handler.set_option_group(:item1_A_i, ["Items A", "Items i"])
+option_handler.set_option_group([:item2_A_ii, :item3_A_ii, :item4_A_ii], ["Items A", "Items ii"])
+
+option_handler.set_option_group([:item1_B_i, :item2_B_i], ["Items B", "Items i"])
+option_handler.set_option_group([:item3_B_ii, :item4_B_ii], ["Items B", "Items ii"])
+
+option_handler.set_option_group(:item1_C, "Items C")
+~~~
+
+To get the following nested menu:
+
+##### Setting Development Verbosity
+
+
+% end

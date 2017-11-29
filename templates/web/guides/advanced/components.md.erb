@@ -1,0 +1,238 @@
+% render "layouts/guides.html" do
+
+If you've looked at the section on [SubBlocks]() and at the section on (Components)[],
+you'll probably notice many similarities. It may seem that <code>SubBlocks</code> are just a more sophisticated
+version of <code>Components</code>. Well... that's exactly right! Both are classes that mixin the <code>Componentable</code>
+model.
+
+#### Mixing In Componentable
+
+#### Compentable API
+
+<code>Componentable</code> actually contains two APIs. The first is the API usable by the <code>includer</code>. This
+is the API that <code>Componentable</code> classes will get for free, but can be overridden and extended to make
+custom <code>Compentable</code> classes.
+
+The basic API is:
+
+~~~ruby
+
+~~~
+
+All of these will operate on the <code>componentable_container</code>, discussed in the previous section.
+Additional details are available in [Origen's API Pages Here.]()
+
+##### Adding Componentable Objects
+
+Most likely, you will want to override the <code>add</code> method to cover how to add your custom components. The
+standard <code>add</code> method will simply instantiate the given class (or an empty class if none is given), check
+that the name doesn't already exist, then add the component. Not much. However, <code>add</code> is actually split
+into a few methods that you can use if you override <code>add</code>:
+
+~~~ruby
+error_if_added(name) #=> checks if the name has already been added. If not, returns nil. Otherwise,
+                     #=> raises an error telling the user that the name has already been added
+~~~
+
+#### Parent API
+
+#### Booting
+
+Now that we've setup a <code>Componentable</code> object and its parent, its time to boot it up. There are two methods
+to do so, one for the <code>Parent</code> and one for the <code>includer</code>
+
+~~~ruby
+Origen::Componentable.init_includer_class(klass)
+Origen::Componentable.init_parent_class(parent_class, includer_class)
+~~~
+
+These can be called, for example, as:
+
+~~~ruby
+class includer
+  include Origen::Componentable
+  
+  def initialize
+    Origen::Componentable.init_includer_class(self)
+  end
+end
+
+class Parent
+  include includer
+  
+  def initialize
+    Origen::Componentable.init_parent_class(self, includer)
+  end
+end
+~~~
+
+#### Booting With Origen
+
+So, assuming we can figure out what's <code>Componentable</code>, what's the <code>Parent</code> and what's the
+<code>Includer</code>, we could automate the booting process. Origen provides us just means to do that.
+
+In the original in the API section, you'll see that the line <code>include Origen::Model</code> was included then
+mysteriously vanished in the above booting section. By including <code>Origen::Model</code> in the <code>Parent</code>
+<strong>and</strong> in the <code>Includer</code>, we give Origen permission to extend the <code>.new</code> method, and
+by doing so, allow Origen to also boot up any <code>Componentable</code> objects the class has.
+
+So, we can automate this by:
+
+~~~ruby
+
+# includer.rb
+module Includer
+  class Includer
+    include Origen::Model
+    include Origen::Componentable
+  end
+end
+
+# parent.rb
+class Parent
+  include Origen::Model
+  include Includer
+end
+
+# origen i
+p = Parent.new
+p.includers = {}
+~~~
+
+And that's all!
+
+A few notes on the interals though:
+
+Ruby only allows Modules to be included, not classes. The purpose of using <code>Componentable</code> classes inside
+of Modules is to allow us to just use <code>include</code> simply and setup the <code>Componentable</code> objects
+with just that. However, under the hood, Origen is just going through the included modules, looking for any and all classes
+that include <code>Componentable</code>. This means, that the module and class names need not match (as they have in all
+of these examples) and that you can put more than one class in a single module. For example, these will all do as you'd
+expect:
+
+~~~ruby
+
+# includer.rb
+module Includer
+  class MyIncluder
+    include Origen::Model
+    include Origen::Componentable
+  end
+end
+
+# parent.rb
+class Parent
+  include Origen::Model
+  include Includer
+end
+
+# origen i
+p = Parent.new
+p.includers #=> no method error
+p.my_includers #=> {}
+~~~
+
+~~~ruby
+
+# includer.rb
+module Includer
+  class MyIncluder
+    include Origen::Model
+    include Origen::Componentable
+  end
+  
+  class MyOtherIncluder
+    include Origen::Model
+    include Origen::Componentable
+  end
+end
+
+# parent.rb
+class Parent
+  include Origen::Model
+  include Includer
+end
+
+# origen i
+p = Parent.new
+p.includers #=> no method error
+p.my_includers #=> {}
+p.my_other_includers #=> {}
+~~~
+
+Note that the name still comes from the class name, not from the module name.
+
+<code>SubBlocks</code> and <code>Components</code> are actually included by <code>Origen::Model</code>, not explicitly
+by the application class themselves. This also means that <code>Componentable</code> classes are checked for recursively.
+So, the follow are also valid:
+
+~~~ruby
+
+# includer.rb
+module Includer
+  module MyIncluder
+    class MyIncluder
+      include Origen::Model
+      include Origen::Componentable
+    end
+  end
+
+  module ThisIncluderHere
+    class MyOtherIncluder
+      include Origen::Model
+      include Origen::Componentable
+    end
+  end
+end
+
+# parent.rb
+class Parent
+  include Origen::Model
+  include Includer
+end
+
+# origen i
+p = Parent.new
+p.includers #=> no method error
+p.my_includers #=> {}
+p.my_other_includers #=> {}
+~~~
+
+~~~ruby
+
+# includer.rb
+module Includer
+  module MyIncluder
+    class MyIncluder
+      include Origen::Model
+      include Origen::Componentable
+    end
+  end
+
+  module ThisIncluderHere
+    class MyOtherIncluder
+      include Origen::Model
+      include Origen::Componentable
+    end
+  end
+end
+
+# base.rb
+module Base
+  include Includer
+end
+
+# parent.rb
+class Parent
+  include Origen::Model
+  include Base
+end
+
+# origen i
+p = Parent.new
+p.includers #=> no method error
+p.my_includers #=> {}
+p.my_other_includers #=> {}
+~~~
+
+% end

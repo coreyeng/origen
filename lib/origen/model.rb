@@ -29,6 +29,7 @@ module Origen
       include Origen::Tests
       include Origen::PowerDomains
       include Origen::Clocks
+      include Origen::Component
     end
 
     module ClassMethods
@@ -118,10 +119,13 @@ module Origen
       klass = self.class
       while klass != Object
         controller_class = "#{klass}Controller"
-        if eval("defined? #{controller_class}")
-          return eval(controller_class)
-        elsif eval("defined? ::#{controller_class}")
-          return eval("::#{controller_class}")
+        unless controller_class.start_with?('#<Class')
+          # klass is an anonymous class. Can't support automatic resolution with anonymous classes
+          if eval("defined? #{controller_class}")
+            return eval(controller_class)
+          elsif eval("defined? ::#{controller_class}")
+            return eval("::#{controller_class}")
+          end
         end
         klass = klass.superclass
       end
