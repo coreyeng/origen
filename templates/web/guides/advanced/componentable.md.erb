@@ -1,0 +1,810 @@
+% render "layouts/guides.html" do
+
+If you've looked at the section on [SubBlocks](<%= path "/guides/models/defining/#Adding_Sub_Blocks" %>) 
+and at the section on [Components](<%= path "/guides/models/components" %>),
+you'll probably notice many similarities. It may seem that <code>SubBlocks</code> are just a more sophisticated and feature
+rich version of <code>Components</code>. Well... that's exactly right! Both are classes that mixin the <code>Componentable</code>
+mixin.
+
+(Note, the above is not stricly true now, but will be before too long. It's a work in progress.)
+
+The <code>Origen::Componentable</code> module (henceforth referred to as just <code>Componentable</code>) is a
+[mixin module](http://ruby-doc.com/docs/ProgrammingRuby/html/tut_modules.html). The name <code>Componentable</code> is
+a protologism taking after Ruby's own <code>Enumerable</code> mixin. By mixing in <code>Componentable</code> with
+your classes, you will automatically be given methods to add, remove, move, copy, and query objects you've added. Now,
+you may think... "well, that's easy enough to do on my", and that's very true. But, <code>Componentable</code> will
+handle all that boiler plate code for you while providing a common interface and having an easily managed/updated
+mixin so that bug fixes and feature enhancements will be felt across all your <code>Componentable</code> classes
+without any intervention from the owners.
+
+In addition, <code>Componentable</code> can handle initiailizing <code>Componentable's</code> parent classes. This
+means that in addition to your class getting add, remove, query, etc. methods internally, any parent that uses
+your class will also receive add, remove, query, etc. methods, again, without any intervention.
+
+If this is of interest to you, sections below will discuss how to mixin the <code>Componentable</code> module, how to 
+handle instantiating and initializing your classes, and what the API provides.
+
+### Mixing In Componentable
+
+Mixing in <code>Componentable</code> is easy and does not require that any particular methods be defined. You
+can mix it in by just putting the following into your class:
+
+~~~ruby
+include Origen::Componentable
+~~~
+
+<code>Componentable</code> actually contains two APIs. The first is the API used by the <code>includer</code> class,
+that is, the class that includes <code>Componentable</code>. This is the class that acts as the interface between the
+class that actually adds and uses the objects <code>the parent class</code> and the class that holds maintains the 
+objects <code>the includer class</code>.
+
+If this is still confusing, it should make more sense as you move through this guide and for now, just know that the
+class that contain <code>include Origen::Componentable</code> is the <code>includer class</code> and the class that
+users the <code>componentable class</code> is its <code>parent class</code>.
+
+#### Contents
+
+<hr style="border-color:red" >
+
+There's quite a few sections to this guide. The marks below should help you jump around appropriately.
+
+<u>Add this when the docs are finished</u>
+
+<hr style="border-color:red" >
+
+### The Componentable Class
+
+#### Booting the Includer
+
+All that <code>Componentable</code> requires is an instance variable called <code>_componentable_container</code>. This
+is a generic name that the API below will interact with.
+
+Depending on how you setup your class, you still may not need to do anything. If your componentable class includes
+<code>Origen::Model</code>, then the boot process will take place automatically. <code>Componentable</code> implements
+an <code>origen_model_init</code> callback handler for this 
+(see [here](<%= path "/guides/misc/callbacks/#origen_model_init" %>)).
+callback handler to add and initialize this object for you. The following will take care of everything for you:
+
+~~~ruby
+include Origen::Model
+include Origen::Componentable
+~~~
+
+If not, you'll need to take some action yourself. <code>Componentable</code> comes with a method to assist with this:
+<code>init_includer_class</code> (<code>includer</code> being the class that <i>includes</i> <code>Componentable</code>).
+Calling this method in your classes <code>initialize</code> function will accomplish the same thing as including
+<code>Origen::Model</code>. The usage is:
+
+~~~ruby
+# Initialze the _componentable_container object
+# Note that this is in the Origen::Componentable module's class methods, not in the mixin.
+
+# Initialize internally of the class
+
+class Includer
+  include Origen::Componentable
+
+  def initialize(options={})
+    Origen::Componentable.init_includer_class(self)
+  end
+end
+
+
+# Initialize externally and already existing object
+class Includer
+  include Origen::Componentable
+end
+
+i = Includer.new
+Origen::Componentable.init_includer_class(i)
+~~~
+
+After booting, the componentable class is ready!
+
+#### The API
+
+This is the API that <code>Componentable</code> classes will get for free. However, the <code>includer class</code>
+can override or extend any of these methods to make custom <code>Compentable</code> classes.
+
+The basic API includes these methods:
+
+~~~ruby
+
+# Adds new object
+
+add(name, options={}, &block)
+#=> adds a new object, :name
+
+add(name, class_name: ClassToAdd
+#=> adds a new object of class ClassToAdd
+
+add(name) do |n|
+  n.class_name ClassToAdd
+end
+#=> (also) adds a new object of class ClassToAdd using block syntax
+
+# Querying objects
+
+list
+#=> list the available names in the componentable container
+
+has?(name)
+#=> returns true if and object with :name has been added
+
+[](name)
+#=> returns the object at :name, or nil if :name has not been added
+
+# Moving and copying objects
+
+copy(to_copy, to_location, options = {})
+#=> # copies an object from to_copy to to_location, cloning the object
+
+move(to_move, new_name, option={})
+#=> Moves an object from to_move to new_name
+
+# Iterating through objects
+
+each(&block)
+#=> runs the generic :each method from enumerable across the underlying componentable container hash
+
+select(&block)
+#=> runs the generic :select method from enumerable across the underlying componentable container hash
+
+instances_of(class_name)
+#=> returns an array of all the names of class :class_name
+
+# Removing objects
+
+# aliased as :remove
+delete(to_delete)
+#=> deletes the object at :to_delete, returning the object
+
+# aliased as :clear and :remove_all
+delete_all
+#=> deletes everything in the componentable container
+
+~~~
+
+Additional details are available in [Origen's API Pages Here.](<% path= "/api/Origen/Componentable.html" %>)
+A full <code>Componentable</code> API can be found there, with all of these method's usage, options, and
+examples.
+
+All of these will operate on the <code>componentable_container</code> object and all are provided to you. These
+methods will also be called by the <code>parent class</code> to perform these operations, but more on that later.
+
+#### Includer Class Organization
+
+#### Conclusion
+
+This covers everything the <code>includer class</code> gets for free. Next, we'll discuss the <code>parent class</code>
+
+For information on customizing the <code>includer class</code> you can jump to 
+[here](<%= path "/guides/advanced/componentable#Customizing_Your_Componentable_Class" %>),
+but this may not make as much sense without first getting the parent's perspective.
+
+### The Parent API
+
+The parent API is really what is interesting. When you use the generic Origen components, say, for example, on your
+<code>$dut</code>, you use methods like <code>$dut.add_component</code>, <code>$dut.components_of_class</code>,
+<code>$dut.has_component?</code>, etc. But where do these methods come from? You would think that these are part
+of Origen, that somewhere deep in bowels of the code base are a bunch generic methods to operate on some
+<code>Component</code> class somewhere. But, that's not true.
+
+Those methods are added by booting the <code>parent class</code> of a <code>Componentable</code> 
+<code>includer class</code>
+
+#### Booting the Parent
+
+Since we can't do much without booting the <code>parent class</code>, we'll cover that now. Booting the parent is
+more involved than booting the includer. That said, if the <code>includer class</code> is set up a certain way,
+as discussed [here](<%= path "/guides/advanced/componentable#Includer_Class_Organization" %>) then
+the boot process for the parent can be automated as well. Booting the parent class includer has two steps:
+
+1. Instantiate the includer class as an instance variable on the parent class.
+2. Define the API on the parent class based on the NAME of the includer class.
+
+Define the API based on the name of the includer class? Yep! When trying to add the parent API, two names will be used:
+the <code>singleton_name</code> and the <code>plural_name</code>. The process for this is:
+
+1. Use Ruby's/Rail's [underscore](https://apidock.com/rails/String/underscore) method as the <code>singleton_name</code>
+2. Apply a few general rules that covers most cases for pluralizing. This will be the <code>plural_name</code>
+
+In general, this will just be adding an <code>s</code> to the <code>singleton_name</code>, but it can handle a few
+other cases, such as:
+
+* 'is' -> 'es' (as in 'analysis' -> 'analyses')
+* 's/h/ch/sh/x/z' -> 'es' (as in 'bus' -> 'buses', or 'box' -> 'boxes')
+* 'on' -> 'a' (as in 'criterion' -> 'criteria')
+* all other cases will just 's' appended (as in 'component' -> 'components')
+
+You can run this method on your class yourself in interactive mode. This returns a <code>Hash</code> with keys
+<code>singleton_name</code> and <code>plural_name</code>. For example:
+
+~~~ruby
+Origen::Componentable.componentable_names(Origen::Component)
+
+{
+  singleton_name: :component
+  plural_name: :components
+}
+
+Origen::Componentable.componentable_names(MyTest)
+
+{
+  singleton_name: :my_test
+  plural_name: :my_tests
+}
+~~~
+
+We here at Origen are engineers, not writers, and not interested in figuring out all rules of how to make
+everything plural (I can tell you, the author of this particular section is a native english speaker, and still got
+half rules wrong before looking them up). So, if you don't like the name <code>Compomentable</code> gave you, no problem! 
+You can define it yourself using two <code>class constants</code> (not <code>instance variables</code>). The following
+examples will show this:
+
+~~~ruby
+
+class MyTest
+  COMPONENTABLE_SINGLETON_NAME = 'just_test'
+end
+
+# This will take the 'just_test' singleton_name, and pluralize it as using that name
+{
+  singleton_name: :just_test
+  plural_name: :just_tests
+}
+
+class GollumsTest
+  COMPONENTABLE_PLURAL_NAME = 'gollums_testesses'
+end
+
+# This will evaluate the singleton name as normal, but use the given plural name
+{
+  singleton_name: :gollums_test
+  plural_name: :gollums_testesses
+}
+
+class MyTest
+  COMPONENTABLE_SINGLETON_NAME = 'test'
+  COMPONENTABLE_PLURAL_NAME = 'tests'
+end
+
+# This will use both the provided singletone and plural name.
+{
+  singleton_name: :test
+  plural_name: :tests
+}
+~~~
+
+Ruby itself has some requirement though. Due to how these names will be used, they can't start with a capital letter.
+So, even if you define a <code>COMPONENTABLE_SINGLETON_NAME</code> and/or a <code>COMPONENTABLE_PLURAL_NAME</code> name,
+they are getting downcased either way or Ruby won't let us run anything.
+
+Note that even this breaks down for words like <code>deer</code>, as <code>Componentable</code> requires that the
+singleton name and plural name be different (otherwise methods will step on each other), and will complain if this
+is not met. So, apologies, but you'll have to keep the plural of your <code>Deer</code> class as <code>Deers</code>,
+which is [technically correct actually](http://grammarist.com/plurals/deer-vs-deers/), but not really important so...
+moving on.
+
+Back to booting the parent: the easiest way is just to let Origen to do it for you. Like the <code>includer class</code>,
+including <code>Origen::Model</code> will let us hook into the intializer and take care of booting the parent for you.
+
+<div class="alert alert-danger">
+  <strong>Danger!</strong> This requires that your <code>includer class</code> is also either an includer of 
+  code>Origen::Model</code> OR intializes itself. If not, you'll end up with a fully built parent-API and its very 
+  own instance variable pointing to an <code>includer class</code>... that has no <code>comopnentable container</code>.
+  As you can imagine, all of the attempt to use the includer will result is errors. You can boot it yourself there
+  in the parent as discussed <a href="<%= path '/guides/advanced/componentable#Booting_the_Includer' %>">here</a>. This can
+  also be used to boot <code>includer classes</code> that are not setup as described
+  <a href="<%= path '/guides/advanced/componentable#Includer_Class_Organization' %>">here</a>.
+</div>
+
+If we let Origen do it, and if our <code>includer classes</code> are setup as shown in the
+[includer organization section](<%= path '/guides/advanced/componentable#Includer_Class_Organization' %>),
+we can simply do this by include the module, including <code>Origen::Model</code> and going on our way.
+
+~~~ruby
+
+class Parent
+  include Origen::Model
+  include MyTest
+end
+
+parent = Parent.new
+parent.my_test #=> Instance of MyTest Componentable class.
+parent.list_my_tests #=> list the current added my_tests, in this case, []
+
+~~~
+
+But, say we want to boot it directly. That is, not rely on Origen. We can do that using the 
+method <code>Origen::Componentable.init_parent_class</code> (class method within the <code>Origen::Componentable</code>
+namespace). We can give this both the instance of the <code>parent class</code> and the <code>includer class</code>
+and it will handle booting for you. For example:
+
+~~~ruby
+
+# Internal to the parent class
+class Parent
+  #include MyTest #=> nevermind
+
+  def intiailize
+    Origen::Componentable.init_parent_class(self, MyTest)
+  end
+end
+
+# External to the parent class
+class Parent
+  #include MyTest #=> nevermind.
+
+  def intiailize
+    #Origen::Componentable.init_parent_class(self, MyTest) #=> Never mind this too.
+  end
+end
+
+p = Parent.new
+Origen::Componentable.init_parent_class(p, MyTest)
+
+~~~
+
+And... we're done! Now we've got the parent booted up, we're ready to start using it.
+
+#### The API (version parent)
+
+Now, the API for the parent is bit trickier... as its not static. What exactly the API on the parent class is
+will be dependent on what you've named your class.
+
+Continuing on with our <code>MyTest</code> includer class example, we can use the names convention from
+[here]() to know that:
+
+1. The singleton name is: <code>my_test</code>
+2. The plural name is:    <code>my_tests</code>
+
+After booting, we'll be able to use our includer class on the parent:
+
+~~~ruby
+
+p.my_test   #=> MyTest object
+p.my_tests  #=> {}
+
+p.add_tests(:test1)
+p.list_my_tests #=> ["test1"]
+
+p.add_tests(:test2) do |t|
+  t.class_name TestClass
+end
+
+p.list_my_tests #=> ["test1", "test2"]
+
+p.my_tests["test1].do_something
+#=> run method :do_something with object at name "test1"
+
+~~~
+
+Since this API is not static, its more difficult to document. You can see the method implementation [here](),
+but the full API is placeholders can be found [here]().
+This API will show which <code>Componentable</code> method is called. So, calling the method from the parent
+class boils down to calling a includer class method and all of relevent and defined options will be passed down
+to it. You can review the full include API [here]().
+
+#### Controlling Accessors on the Parent
+
+As with <code>compoments</code> and <code>sub_blocks</code>, we added <code>COMPONENTABLE_ADDS_ACCESSORS = true</code>
+constant in the <code>MyTest</code> class. So, can expect:
+
+~~~ruby
+p.test1 #=> Object stored in MyTest at name :test1
+p.test2 #=> Object stored in MyTest at name :test2
+~~~
+
+But, say we already had method <code>:test1</code> on the parent? The result would be a 
+<code>Origen::Componentable::NameInUseError</code>. And if we had multiple <code>test</code> classes, and all
+had a <code>:test1</code> and all decided to add <code>COMPONENTABLE_ADDS_ACCESSORS = true</code>, what can
+our parent do?
+
+For a new example, say we have two includer classes: <code>MyClockingTest</code> and <code>MyPowerTest</code>, and
+both decided that <code>COMPONENTABLE_ADDS_ACCESSORS = true</code>. Also, our specification says that both
+need to have a test named <code>:test1</code>. We have a few ways we can deal with this.
+
+First, we can just disable all accessors on the parent unconditionally (including <code>components</code> and
+<code>sub_blocks</code>). This takes away the ability for us to use <code>parent.test1</code>, but now we can
+have <code>parent.my_clocking_tests[:test1]</code> and <code>parent.my_power_tests[:test1]</code> coexisting. We
+can do this by setting an <code>attr_reader</code> or defining a method <code>:disable_componentable_accessors</code>
+and having it return <code>true</code>. Everytime an accessor is added, it will see that on the parent and decide
+against adding said accessor.
+
+But, we can also dictate which includer classes shouldn't have accessors and which should. Maybe we want to disable
+only the accessors on <code>MyClockingTest</code> and <code>MyPowerTest</code>, but leave them for
+<code>Compoonent</code> and <code>SubBlock</code>.
+
+If you define the method <code>:disable_componentable_accessors</code> to instead take an argument,
+<code>Componentable</code> will give it the includer class requesting to add an accessor, as a class name. We can write
+a method like so to do this:
+
+~~~ruby
+def disable_componentable_accessors includer_class
+  if includer_class == MyClockingTest || includer_class == MyPowerTest
+    true
+  else
+    false
+  end
+end
+~~~
+
+You can build this method however you see fit on the parent to only get the accessors you want from the various includers.
+
+#### Example API
+
+Using our MyTest includer class again, imported by our Parent parent class, the full API we have available on the parent
+is below. You can skip to [here]()
+to view the API in generic terms.
+
+We know from before that the <code>singleton_name</code> is <code>:my_test</code> and that <code>plural_name</code> is 
+<code>:my_tests</code>. With these in mind, the API on the parent class will resolve to:
+
+~~~ruby
+
+# Retrieving an instance of the MyTest object
+parent.my_test 
+  #=> instance of MyTest 
+
+# Retrieving MyTest's componentable container
+parent.my_test._componentable_container
+parent.my_tests
+  #=> Hash with indifferent access
+
+# Retrieving MyTest instance variable directly on the parent
+instance_variable_get("@_my_test".to_sym) #=> instance variable on the parent class
+
+# Adding Objects
+# These methods correspond to a my_test.add call.
+parent.my_test(name, options={}, &block)
+parent.my_tests(name, options={}, &block)
+parent.add_my_test(name, options={}, &block)
+# add_my_test is aliased to:
+  #=> add_my_tests
+
+# Listing Names of Objects
+# These methods correspond to a my_test.list call
+parent.list_my_tests
+
+# Querying Objects
+# These methods correspond to a my_test.instances_of call
+parent.my_tests_of_class(class_name)
+# my_tests_of_class is aliased to:
+  #=> my_tests_instances_of
+  #=> my_tests_of_type
+
+# Emumerating
+# These methods correspond to a my_test.each call
+parent.my_tests(&block)
+parent.each_my_test(&block)
+# each_my_test is aliased to:
+  #=> all_my_tests
+
+# Selecting
+# These methods correspond to a my_test.select call
+parent.select_my_tests(&block)
+# select_my_tests is aliased to:
+  #=> select_my_test
+
+# Copying
+# These methods correspond to a my_test.copy call
+parent.copy_my_test(to_copy, to_location, options={})
+# copy_my_test is aliased to:
+  #=> copy_my_tests
+
+# Moving
+# These methods correspond to a my_test.move call
+parent.move_my_test(to_move, to_location, options={})
+# move_my_test is aliased to:
+  #=> move_my_tests
+
+# Deleting Single Objects
+# These methods correspond to a my_test.delete call
+parent.delete_my_test(name)
+# delete_my_test is aliased to:
+  #=> delete_my_tests
+  #=> remove_my_test
+  #=> remove_my_tests
+
+# Deleting All Objects
+# These methods correspond to a my_test.delete_all call
+parent.delete_all_my_tests
+# delete_all_my_tests is aliased to:
+  #=> clear_my_tests
+  #=> remove_all_my_tests
+
+~~~
+
+Also recall, that these methods link directly back to just calling the corresponding method on the <code>includer class</code>,
+so the full method documentation (parameters, options, return values, exception raised, etc.) can be found back at the
+[includer class' API]().
+
+#### Full Parent API
+
+In more generic terms, adding an includer to a parent yields the following API on the parent class:
+
+Recall [here]() that you can use the methods
+<code>_singleton_name</code> and <code>_plural_name</code> on an instance of an includer class to
+query those names. You can also use the class method <code>Origen::Componentable.componentable_names(includer)</code>
+to get a hash containing the keys <code>:singleton</code> and <code>:plural</code>, either with an instance of
+the includer class or with the class directly.
+
+Again, these methods link directly back to just calling the corresponding method on the <code>includer class</code>,
+so the full method documentation can be found back at the [includer class' API]().
+
+~~~ruby
+
+# Retrieving an instance of the includer class object
+parent.<singleton_name> #=> instance of the includer class
+
+# Retrieving an instance of the includer class's componentable container
+parent.<singleton_name>._componentable_container
+parent.<plural_name>
+
+# Retrieving the includer instance variable directly
+instance_variable_get("@_<singleton_name>".to_sym) #=> instance variable on the parent class
+
+# Adding Objects
+# These methods correspond to a <singleton_name>.add call.
+parent.<singleton_name>(name, options={}, &block)
+parent.<plural_name>(name, options={}, &block)
+parent.add_<singleton_name>(name, options={}, &block)
+# add_<singleton_name> is aliased to:
+  #=> add_<includer_plural_name>
+
+# Listing Names of Objects
+# These methods correspond to a <singleton_name>.list call
+parent.list_<plural_name>
+
+# Querying Objects
+# These methods correspond to a <singleton_name>.instances_of call
+parent.<plural_name>_of_class(class_name)
+# <plural_name>_of_class is aliased to:
+  #=> <plural_name>_instances_of
+  #=> <plural_name>_of_type
+
+# Emumerating
+# These methods correspond to a <singleton_name>.each call
+parent.<plural_name>(&block)
+parent.each_<singleton_name>(&block)
+# each_<singleton_name> is aliased to:
+  #=> all_<plural_name>
+
+# Selecting
+# These methods correspond to a <singleton_name>.select call
+parent.select_<plural_name>(&block)
+# select_<plural_name> is aliased to:
+  #=> select_<singleton_name>
+
+# Copying
+# These methods correspond to a <singleton_name>.copy call
+parent.copy_<singleton_name>(to_copy, to_location, options={})
+# copy_<singleton_name> is aliased to:
+  #=> copy_<plural_name>
+
+# Moving
+# These methods correspond to a <singleton_name>.move call
+parent.move_<singleton_name>(to_move, to_location, options={})
+# move_<singleton_name> is aliased to:
+  #=> move_<plural_name>
+
+# Deleting Single Objects
+# These methods correspond to a <singleton_name>.delete call
+parent.delete_<singleton_name>(name)
+# delete_<singleton_name> is aliased to:
+  #=> delete_<plural_name>
+  #=> remove_<singleton_name>
+  #=> remove_<plural_name>
+
+# Deleting All Objects
+# These methods correspond to a <singleton_name>.delete_all call
+parent.delete_all_<plural_name>
+# delete_all_<plural_name> is aliased to:
+  #=> clear_<plural_name>
+  #=> remove_all_<plural_name>
+
+~~~
+
+<hr style="border-color:red" >
+
+<u>Everything under this line is either old, under construction, or needs review</u>
+
+### Customizing Your Componentable Class
+
+#### Adding Componentable Objects
+
+Most likely, you will want to override the <code>add</code> method to cover how to add your custom components. The
+standard <code>add</code> method will simply instantiate the given class (or an empty class if none is given), check
+that the name doesn't already exist, then add the component. Not much. However, <code>add</code> is actually split
+into a few methods that you can use if you override <code>add</code>:
+
+~~~ruby
+error_if_added(name) #=> checks if the name has already been added. If not, returns nil. Otherwise,
+                     #=> raises an error telling the user that the name has already been added
+~~~
+
+<!--
+### Documentation Generator
+
+Placeholder in the docs for when this is complete
+-->
+
+### Advanced Booting
+
+This section is just as more for Origen developers as it is for users. Booting these classes took some behind the scenes
+work that most users will never see. But, there's some assumptions that are made
+(in addition to the ones [here]()) that can adversely affect booting.
+
+
+
+So, assuming we can figure out what's <code>Componentable</code>, what's the <code>Parent</code> and what's the
+<code>Includer</code>, we could automate the booting process. Origen provides us just means to do that.
+
+In the original in the API section, you'll see that the line <code>include Origen::Model</code> was included then
+mysteriously vanished in the above booting section. By including <code>Origen::Model</code> in the <code>Parent</code>
+<strong>and</strong> in the <code>Includer</code>, we give Origen permission to extend the <code>.new</code> method, and
+by doing so, allow Origen to also boot up any <code>Componentable</code> objects the class has.
+
+So, we can automate this by:
+
+~~~ruby
+
+# includer.rb
+module Includer
+  class Includer
+    include Origen::Model
+    include Origen::Componentable
+  end
+end
+
+# parent.rb
+class Parent
+  include Origen::Model
+  include Includer
+end
+
+# origen i
+p = Parent.new
+p.includers = {}
+~~~
+
+And that's all!
+
+A few notes on the interals though:
+
+Ruby only allows Modules to be included, not classes. The purpose of using <code>Componentable</code> classes inside
+of Modules is to allow us to just use <code>include</code> simply and setup the <code>Componentable</code> objects
+with just that. However, under the hood, Origen is just going through the included modules, looking for any and all classes
+that include <code>Componentable</code>. This means, that the module and class names need not match (as they have in all
+of these examples) and that you can put more than one class in a single module. For example, these will all do as you'd
+expect:
+
+~~~ruby
+
+# includer.rb
+module Includer
+  class MyIncluder
+    include Origen::Model
+    include Origen::Componentable
+  end
+end
+
+# parent.rb
+class Parent
+  include Origen::Model
+  include Includer
+end
+
+# origen i
+p = Parent.new
+p.includers #=> no method error
+p.my_includers #=> {}
+~~~
+
+~~~ruby
+
+# includer.rb
+module Includer
+  class MyIncluder
+    include Origen::Model
+    include Origen::Componentable
+  end
+  
+  class MyOtherIncluder
+    include Origen::Model
+    include Origen::Componentable
+  end
+end
+
+# parent.rb
+class Parent
+  include Origen::Model
+  include Includer
+end
+
+# origen i
+p = Parent.new
+p.includers #=> no method error
+p.my_includers #=> {}
+p.my_other_includers #=> {}
+~~~
+
+Note that the name still comes from the class name, not from the module name.
+
+<code>SubBlocks</code> and <code>Components</code> are actually included by <code>Origen::Model</code>, not explicitly
+by the application class themselves. This also means that <code>Componentable</code> classes are checked for recursively.
+So, the follow are also valid:
+
+~~~ruby
+
+# includer.rb
+module Includer
+  module MyIncluder
+    class MyIncluder
+      include Origen::Model
+      include Origen::Componentable
+    end
+  end
+
+  module ThisIncluderHere
+    class MyOtherIncluder
+      include Origen::Model
+      include Origen::Componentable
+    end
+  end
+end
+
+# parent.rb
+class Parent
+  include Origen::Model
+  include Includer
+end
+
+# origen i
+p = Parent.new
+p.includers #=> no method error
+p.my_includers #=> {}
+p.my_other_includers #=> {}
+~~~
+
+~~~ruby
+
+# includer.rb
+module Includer
+  module MyIncluder
+    class MyIncluder
+      include Origen::Model
+      include Origen::Componentable
+    end
+  end
+
+  module ThisIncluderHere
+    class MyOtherIncluder
+      include Origen::Model
+      include Origen::Componentable
+    end
+  end
+end
+
+# base.rb
+module Base
+  include Includer
+end
+
+# parent.rb
+class Parent
+  include Origen::Model
+  include Base
+end
+
+# origen i
+p = Parent.new
+p.includers #=> no method error
+p.my_includers #=> {}
+p.my_other_includers #=> {}
+~~~
+
+# Notes on Anonymous Classes
+
+% end

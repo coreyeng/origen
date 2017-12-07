@@ -2,40 +2,6 @@ module Origen
   module ModelInitializer
     extend ActiveSupport::Concern
 
-          # Need this because mod.constants doesn't include namespaces and it screws with nested modules. For example:
-          # module A
-          #   class Y; end
-          #   module B
-          #     class X; end
-          #   end
-          # end
-          # Will find constants :Y, :B, ... AND, :X on A, but A::X doesn't exist. It should be A::B::X
-          # So, need to iterate through the modules to find the correct contexts to try and boot the mod/class.
-          def self.boot_module(mod, parent, options={})
-            # See if the current module has an :origen_model_init method
-            if options[:booted]
-              puts "booted: #{options[:booted]}"
-              return #if options[:booted].include?(mod)
-            end
-            mod.send(:origen_model_init, x) if mod.respond_to?(:origen_model_init)            
-            
-            mod.constants.each do |constant|
-              # Now, need to check if the constant is actually defined in the current module, or if its nested.
-              # if the constant is defined:
-              #   if its a module, rerun boot module in the context of the new module
-              #   if its class, do the same (nested classes)
-              #   if its neither of those, do nothing (can't boot a non-module or non-class)
-              # if the constant isn't defined in the current context, skip it. It will picked up later.
-              if mod.const_defined?(constant)
-                if mod.const_get(constant).is_a?(Module) #|| mod.const_get(constant).is_a?(Class)
-                  # This is will also take care of booting the mod/class
-                  options[:booted] ? options[:booted] << constant : options[:booted] = [constant]
-                  boot_module(mod.const_get(constant), parent, options)
-                end
-              end
-            end
-          end
-
     module ClassMethods
       # This overrides the new method of any class which includes this
       # module to force the newly created instance to be registered as
@@ -46,11 +12,6 @@ module Origen
         x = allocate
         x.send(:init_top_level) if x.respond_to?(:includes_origen_top_level?)
         x.send(:init_sub_blocks, *args) if x.respond_to?(:init_sub_blocks)
-        
-        # When initialized as an Origen Model, force inclusion of Components and Subblock modules.
-        #x.class.class_eval do |c|
-        #  include Origen::Component
-        #end
         
         if x.respond_to?(:version=)
           version = options[:version]

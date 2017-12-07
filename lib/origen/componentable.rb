@@ -1,6 +1,6 @@
 module Origen
 
-  # Neologism, taking after Enumerable, stating that this object can
+  # Protologism taking after Enumerable, stating that this object can
   # behave like an Origen Component
   module Componentable
     # Custom Componentable Errors
@@ -27,8 +27,6 @@ module Origen
     # Note that someone making a module to house a Componentable class is very unlikely to do this, but it could
     # still happen.
     def self.add_included_callback(othermod)
-      # Don't want to just blatantly override the included method. We'll take it over if its available though.
-   #### Add the above
       othermod.define_singleton_method(:origen_model_init) do |klass, options={}|
         Origen::Componentable.init_parent_class(klass, self)
       end
@@ -57,16 +55,22 @@ module Origen
     end
     
     def self.init_parent_class(parent_class, includer_class)
-      includer_single_name = begin
-        if includer_class.name.include?('::')
-          name = includer_class.name.split('::').last.underscore
-        else
-          name = includer_class.name.underscore
-        end
-      end
-      includer_plural_name = Origen::Componentable.componentable_names(includer_class)[:plural]   
+      #includer_single_name = begin
+      #  if includer_class.name.include?('::')
+      #    name = includer_class.name.split('::').last.underscore
+      #  else
+      #    name = includer_class.name.underscore
+      #  end
+      #end
+      #includer_plural_name = Origen::Componentable.componentable_names(includer_class)[:plural]   
+      
+      names = Componentable.componentable_names(includer_class)
+      includer_single_name = names[:singleton] 
+      includer_plural_name = names[:plural] 
+      
       unless parent_class.is_a?(Class)
-        parent_class.instance_variable_set("@_#{includer_single_name}".to_sym, includer_class.new)
+        inc = parent_class.instance_variable_set("@_#{includer_single_name}".to_sym, includer_class.new)
+        inc.parent = parent_class
         parent_class = parent_class.class
       end
       
@@ -76,28 +80,28 @@ module Origen
         # Define the root method (singleton-named method)
         # If any arguments are given, it behaves as an :add method.
         # Otherwise, it returns the underlying object itself.
-        define_method includer_single_name.to_sym do |*args|
+        define_method includer_single_name.to_sym do |*args, &block|
           if args.size == 0
             # No arguments, so just return the class instance
             instance_variable_get("@_#{includer_single_name}".to_sym)
           else
             # Arguments were provided, so treating this as an :add attempt
-            instance_variable_get("@_#{includer_single_name}".to_sym).add(*args)
+            instance_variable_get("@_#{includer_single_name}".to_sym).add(*args, &block)
           end
         end
         
         # Define the plural-named method.
-        # If arguments are given, then it behaves as an :add attempt.
-        # If a block is given, it will behave as an :each operation and call the block.
+        # If arguments are given, then it behaves as an :add attempt, with or without a block.
+        # If a block is given without any arguments, it will behave as an :each operation and call the block.
         # if no arguments are given, it will return the underlying HASH (not the object).
         #   This allows for plural_name[name] to 
         define_method "#{includer_plural_name}".to_sym do |*args, &block|
-          if block
+          if block && args.size == 0
             instance_variable_get("@_#{includer_single_name}".to_sym).each(&block)
           elsif args.size == 0
             instance_variable_get("@_#{includer_single_name}".to_sym)._componentable_container
           else
-            instance_variable_get("@_#{includer_single_name}".to_sym).add(*args)
+            instance_variable_get("@_#{includer_single_name}".to_sym).add(*args, &block)
           end
         end
         
@@ -105,8 +109,8 @@ module Origen
         # what we'll actually do is just define one method then alias all the others together.
         # Currently, this includes:
         #   <includer_plural_name>, add_<includer_single_name>, add_
-        define_method "add_#{includer_single_name}".to_sym do |name, options={}|
-          instance_variable_get("@_#{includer_single_name}".to_sym).add(name, options)
+        define_method "add_#{includer_single_name}".to_sym do |name, options={}, &block|
+          instance_variable_get("@_#{includer_single_name}".to_sym).add(name, options, &block)
         end
         alias_method "add_#{includer_plural_name}".to_sym, "add_#{includer_single_name}".to_sym
       
@@ -180,12 +184,13 @@ module Origen
     #   <includer>.has? becomes $dut.has_<include>?
     #   <includer>.delete(name_to_delete) becomes $dut.delete_<includer>(name_to_delete)
     #   etc. etc.
-    def self.parent_or_owner(includer)
-      return includer.parent if includer.parent
-      return includer.owner if includer.owner
-      nil
-    end
+    #def self.parent_or_owner(includer)
+    #  return includer.parent if includer.parent
+    #  return includer.owner if includer.owner
+    #  nil
+    #end
     
+    # Gets the plural name of the class.
     def _plural_name
       @plural_name || begin
         @plural_name = Origen::Componentable.componentable_names(self)[:plural]
@@ -201,6 +206,16 @@ module Origen
       end
     end
     
+    # Gets the parent of the includer class.
+    def parent
+      @parent
+    end
+    
+    # Sets the parent of the includer class
+    def parent=(p)
+      @parent = p
+    end
+    
     def self.componentable_names(klass)
       unless klass.is_a?(Class)
         # If we were given an instance of a class, get its actual class.
@@ -212,7 +227,7 @@ module Origen
       #  COMPONENTABLE_SINGLETON_NAME, if it's defined.
       # The only corner case here is if the class is anonymous, then a COMPONENTABLE_SINGLETON_NAME is required.
       if klass.const_defined?(:COMPONENTABLE_SINGLETON_NAME)
-        names[:singleton] = klass.const_get(:COMPONENTABLE_SINGLETON_NAME).underscore.to_sym
+        names[:singleton] = klass.const_get(:COMPONENTABLE_SINGLETON_NAME).downcase.to_sym
       else
         # Check if this is an anonymous class. If so, complain that COMPONENTABLE_SINGLETON_NAME is required
         if !klass.respond_to?(:name) || klass.name.nil? #|| klass.name.start_with?('#<Class:')
@@ -278,6 +293,10 @@ module Origen
       names
     end
     
+    def add(name, options={}, &block)
+      _add(name, options, &block)
+    end
+    
     # Adds a new item to the componentable container.
     # @note All options added will be passed to the subclasses instantiation.
     # @note The options is only valid for the stock :add method.
@@ -287,7 +306,20 @@ module Origen
     # @option options [Class, String] class_name The class to instaniate the component at :name as.
     # @return [ComponentableObject] The instantiated class at :name
     # @raise [Origen::Componentable::NameInUseError] Raised if :name already points to a component.
-    def add(name, options={})
+    def _add(name, options={}, &block)
+      # Add the name and parent to the options if they aren't already given
+      # If the parent isn't available on the includer class, it will remain nil.
+      options = {
+        name: name,
+        parent: parent
+      }.merge(options)
+      
+      if block_given?
+        collector = Origen::Utility::Collector.new
+        yield collector
+        options.merge!(collector.store)
+      end
+     
       if @_componentable_container.key?(name)
         raise Origen::Componentable::NameInUseError, "#{self._singleton_name} name :#{name} is already in use."
       end
@@ -309,6 +341,35 @@ module Origen
         # Instantiate a standard Component if no class given
         @_componentable_container[name] = Origen::Component::Default.new(options)
       end
+      
+      if parent
+        def push_accessor(name)
+          if parent.respond_to?(name.to_sym)
+            raise Origen::Componentable::NameInUseError,
+                  "Method :#{name} already exists on object #{parent.class}!"
+          else
+            parent.send(:eval, "define_singleton_method :#{name.to_sym} do; #{_singleton_name}[:#{name}]; end")
+          end
+        end
+        
+        if self.class.const_defined?(:COMPONENTABLE_ADDS_ACCESSORS) && self.class.const_get(:COMPONENTABLE_ADDS_ACCESSORS)
+          if parent.respond_to?(:disable_componentable_accessors)
+            if parent.method(:disable_componentable_accessors).arity >= 1
+              if !parent.disable_componentable_accessors(self.class)
+                push_accessor(name)
+              end
+            else
+              if !parent.disable_componentable_accessors
+                push_accessor(name)
+              end
+            end
+          else
+            push_accessor(name)
+          end
+        end
+      end
+      
+      @_componentable_container[name]
     end
     
     # List the items in the componentable container
@@ -322,6 +383,10 @@ module Origen
     # @return [true, false] True if :name exists, False otherwise.
     def has?(name)
       @_componentable_container.include?(name)
+    end
+    
+    def [](name)
+      @_componentable_container[name]
     end
     
     # Copies the component at :to_copy to :to_location. Default is to deep copy (i.e. clone)
@@ -354,7 +419,30 @@ module Origen
         @_componentable_container[to_location] = @_componentable_container[to_copy]
       end
     end
+
+    # Moves a component object from one name to another.
+    # @param to_move [Symbol] Component name to move elsewhere.
+    # @param new_name [Symbol] New name to give to the component from :to_move.
+    # @return [Symbol] The component moved.
+    # @raise [Origen::Componentable::NameInUseError] Raised if :new_name is already in use and the :override option is not specified.
+    # @raise [Origen::Componentable::NameDoesNotExistsError] Raised if :to_move name does not exists.
+    def move(to_move, new_name, options={})
+      overwrite = options[:overwrite] || false
     
+      if @_componentable_container.key?(new_name) && !overwrite
+        # The move location already exists and override was not specified
+        raise Origen::Componentable::NameInUseError, "#{self._singleton_name} name :#{new_name} is already in use"
+      end
+      
+      unless @_componentable_container.key?(to_move)
+        # The to_move name doesn't exist
+        raise Origen::Componentable::NameDoesNotExistError, "#{self._singleton_name} name :#{to_move} does not exist"
+      end
+
+      to_move_object = @_componentable_container.delete(to_move)
+      @_componentable_container[new_name] = to_move_object
+    end
+
     # Deletes a component from the componentable container
     # @param name [Symbol] Name of component to delete
     # @return [Hash(Symbol, <ComponentableItem>)]  containing the name of the component deleted and its component.
@@ -380,29 +468,7 @@ module Origen
       @_componentable_container.clear
     end
     alias_method :clear, :delete_all
-    
-    # Moves a component object from one name to another.
-    # @param to_move [Symbol] Component name to move elsewhere.
-    # @param new_name [Symbol] New name to give to the component from :to_move.
-    # @return [Symbol] The component moved.
-    # @raise [Origen::Componentable::NameInUseError] Raised if :new_name is already in use and the :override option is not specified.
-    # @raise [Origen::Componentable::NameDoesNotExistsError] Raised if :to_move name does not exists.
-    def move(to_move, new_name, options={})
-      overwrite = options[:overwrite] || false
-    
-      if @_componentable_container.key?(new_name) && !overwrite
-        # The move location already exists and override was not specified
-        raise Origen::Componentable::NameInUseError, "#{self._singleton_name} name :#{new_name} is already in use"
-      end
-      
-      unless @_componentable_container.key?(to_move)
-        # The to_move name doesn't exist
-        raise Origen::Componentable::NameDoesNotExistError, "#{self._singleton_name} name :#{to_move} does not exist"
-      end
-
-      to_move_object = @_componentable_container.delete(to_move)
-      @_componentable_container[new_name] = to_move_object
-    end
+    alias_method :remove_all, :delete_all
     
     # Locates all names whose object is a :class_name object.
     # @param class_name [Class, Instance of Class] Class to search componentable container for. This can either be the class name, or can be an instance of the class to search for.

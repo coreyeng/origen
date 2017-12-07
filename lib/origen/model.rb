@@ -12,6 +12,7 @@ module Origen
     included do
       attr_writer :ip_name
       attr_accessor :version
+      attr_accessor :parent
       attr_reader :controller
 
       include Origen::ModelInitializer

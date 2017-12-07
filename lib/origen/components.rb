@@ -22,6 +22,8 @@ module Origen
     
     # Default class instantiate if the class_name is not provided
     class Default
+      include Origen::Model
+      
       attr_reader :options
       
       def initialize(options={})

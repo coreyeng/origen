@@ -8,8 +8,7 @@ module ComponentableSpec
       include Origen::Model
       include Origen::Componentable
       
-      def initialize
-      end
+      COMPONENTABLE_ADDS_ACCESSORS = true
     end
   end
   
@@ -89,6 +88,30 @@ module ComponentableSpec
     end
   end
   
+  module ComponentableNamesTests
+    class TestComponentPluralDefined
+      include Origen::Model
+      include Origen::Componentable
+      
+      COMPONENTABLE_PLURAL_NAME = 'test_plural_names'
+    end
+    
+    class TestComponentSingletonDefined
+      include Origen::Model
+      include Origen::Componentable
+      
+      COMPONENTABLE_SINGLETON_NAME = 'test_singleton_name'
+    end
+    
+    class TestComponentBothDefined
+      include Origen::Model
+      include Origen::Componentable
+      
+      COMPONENTABLE_SINGLETON_NAME = 'test_both_names_singleton'
+      COMPONENTABLE_PLURAL_NAME = 'test_both_names_plural'
+    end
+  end
+  
   #class TopEmpty
   #  include Origen::Model
   #  
@@ -124,6 +147,59 @@ module ComponentableSpec
     #  include Origen::Model
     #  include ComponentableSpec::TestComponentWithoutModel
     #end
+  end
+  
+  module ComponentableAccessorTests
+    class TestDefault
+      include Origen::Model
+      include Origen::Componentable
+    end
+    
+    class TestTrue
+      COMPONENTABLE_ADDS_ACCESSORS = true
+      include Origen::Model
+      include Origen::Componentable
+    end
+    
+    class TestFalse
+      COMPONENTABLE_ADDS_ACCESSORS = false
+      include Origen::Model
+      include Origen::Componentable
+    end
+  end
+  
+  module ComponentableAccessorTestParents
+    class Parent
+      include Origen::Model
+      include ComponentableAccessorTests
+      include TestComponent
+    end
+    
+    class ParentDisableAccessorsReader
+      include Origen::Model
+      include ComponentableAccessorTests
+      include TestComponent
+      
+      attr_reader :disable_componentable_accessors
+      
+      def initialize(option={})
+        @disable_componentable_accessors = true
+      end
+    end
+    
+    class ParentDisableAccessorsMethod
+      include Origen::Model
+      include ComponentableAccessorTests
+      include TestComponent
+      
+      def disable_componentable_accessors(class_name)
+        if class_name == ComponentableSpec::ComponentableAccessorTests::TestTrue
+          true
+        else
+          false
+        end
+      end
+    end
   end
 end
 
@@ -350,17 +426,42 @@ fdescribe 'Componentable' do
         
         context 'with user-defined componentable names' do
           # These tests are mostly accomplished from the componentable_includer_init, but just double check here.
+          before :context do
+            @parent = Class.new do
+              include Origen::Model
+              include ComponentableSpec::ComponentableNamesTests
+            end.new
+          end
           
           it 'will initialize the API with COMPONENTABLE_SINGLETON_NAME defined' do
-            fail
+            expect(@parent).to_not respond_to(:test_component_singleton_defined)
+            expect(@parent).to_not respond_to(:test_component_singleton_defineds)
+            expect(@parent).to respond_to(:test_singleton_name)
+            expect(@parent).to respond_to(:test_singleton_names)
+
+            expect(@parent.test_singleton_name).to be_a(ComponentableSpec::ComponentableNamesTests::TestComponentSingletonDefined)
+            expect(@parent.test_singleton_names).to eql({})
           end
           
           it 'will initialize the API with COMPONENTABLE_PLURAL_NAME defined' do
-            fail
+            expect(@parent).to respond_to(:test_component_plural_defined)
+            expect(@parent).to respond_to(:test_plural_names)
+            expect(@parent).to_not respond_to(:test_component_plural_defineds)
+            
+            expect(@parent.test_component_plural_defined).to be_a(ComponentableSpec::ComponentableNamesTests::TestComponentPluralDefined)
+            expect(@parent.test_plural_names).to eql({})
           end
-          
+                  
           it 'will initialize the API with both COMPONENTABLE_SINGLETON_NAME and COMPONENTABLE_PLURAL_NAME defined' do
-            fail
+            expect(@parent).to_not respond_to(:test_component_both_defined)
+            expect(@parent).to_not respond_to(:test_component_both_defineds)
+            
+            expect(@parent).to respond_to(:test_both_names_singleton)
+            expect(@parent).to_not respond_to(:test_both_names_singletons)
+            
+            expect(@parent).to respond_to(:test_both_names_plural)
+            expect(@parent.test_both_names_singleton).to be_a(ComponentableSpec::ComponentableNamesTests::TestComponentBothDefined)
+            expect(@parent.test_both_names_plural).to eql({})
           end
         end
       end
@@ -392,6 +493,14 @@ fdescribe 'Componentable' do
         @includer._componentable_container.should == {}
       end
       
+      it 'can set its parent' do
+        expect(@includer.parent).to be(nil)
+        
+        temp_parent = ComponentableSpec::InitTests::ParentNoModel.new
+        @includer.parent = temp_parent
+        expect(@includer.parent).to be_a(ComponentableSpec::InitTests::ParentNoModel)
+      end
+      
       describe 'Componentable method: add (stock :add method)' do
         it 'Adds a componentable item to its container (by class object)' do
           @includer.add(:test_string_by_class, class_name: ComponentableSpec::AddTest)
@@ -420,7 +529,8 @@ fdescribe 'Componentable' do
           @includer._componentable_container.has_key?(:default).should == true
           @includer._componentable_container[:default].class.should == ComponentableSpec::AddTest
           
-          @includer._componentable_container[:default].opts.should == {option1: 'option1', option2: 'options2'}
+          expect(@includer._componentable_container[:default].opts[:option1]).to eql('option1')
+          expect(@includer._componentable_container[:default].opts[:option2]).to eql('options2')
         end
         
         it 'Complains if the name of the component already exists' do
@@ -681,10 +791,112 @@ fdescribe 'Componentable' do
           expect(@parent.test_component._componentable_container[:item5]).to be_a(Origen::Component::Default)
         end
         
+        # Make sure that the block form correctly gets passed to all three methods to add a component
+        
+        it 'adds a component: test_component.add(name) do ...' do
+          added = @parent.test_component(:item_block_1) do |c|
+            c.test_block 'test'
+          end
+          expect(added.options).to include(:test_block)
+          expect(added.options[:test_block]).to eql('test')
+        end
+        
+        it 'adds a component: test_components.add(name) do ...' do
+          added = @parent.test_component(:item_block_2) do |c|
+            c.test_block_2 'test 2'
+          end
+          expect(added.options).to include(:test_block_2)
+          expect(added.options[:test_block_2]).to eql('test 2')
+        end
+        
+        it 'adds a component: add_test_component.add(name) do ...' do
+          added = @parent.test_component(:item_block_3) do |c|
+            c.class_name ComponentableSpec::AddTest
+            c.test_block_3 'test 3'
+          end
+          expect(added.opts).to include(:test_block_3)
+          expect(added.opts[:test_block_3]).to eql('test 3')
+          expect(added).to be_a(ComponentableSpec::AddTest)
+        end
+        
         it 'complains if the component to add already exists' do
           expect { @parent.test_components(:item1) }.to raise_error Origen::Componentable::NameInUseError, /test_component name :item1 is already in use/
         end
         
+        context "With dummy parent and includer classes" do
+          it 'adds accessors back to the component name when COMPONENTABLE_ADDS_ACCESSORS = true' do
+            parent = ComponentableSpec::ComponentableAccessorTestParents::Parent.new
+            expect(parent.test_true._componentable_container).to_not include(:item1)
+            parent.add_test_true(:item1)
+            
+            expect(parent.test_true._componentable_container).to include(:item1)
+            expect(parent.test_true._componentable_container[:item1]).to be_a(Origen::Component::Default)
+            expect(parent).to respond_to(:item1)
+          end
+          
+          it 'does not add accessors back to the component name when COMPONENTABLE_ADDS_ACCESSORS = false' do
+            parent = ComponentableSpec::ComponentableAccessorTestParents::Parent.new
+            expect(parent.test_false._componentable_container).to_not include(:item1)
+            parent.add_test_falses(:item1)
+            
+            expect(parent.test_false._componentable_container).to include(:item1)
+            expect(parent.test_false._componentable_container[:item1]).to be_a(Origen::Component::Default)
+            expect(parent).to_not respond_to(:item1)
+          end
+          
+          it 'does not add accessors back to the component name by default' do
+            parent = ComponentableSpec::ComponentableAccessorTestParents::Parent.new
+            expect(parent.test_default._componentable_container).to_not include(:item1)
+            parent.add_test_default(:item1)
+            
+            expect(parent.test_default._componentable_container).to include(:item1)
+            expect(parent.test_default._componentable_container[:item1]).to be_a(Origen::Component::Default)
+            expect(parent).to_not respond_to(:item1)
+          end
+          
+          it 'does not add accessor methods when COMPONENTABLE_ADDS_ACCESSORS = true if :disable_accessors has been set' do
+            parent = ComponentableSpec::ComponentableAccessorTestParents::ParentDisableAccessorsReader.new
+            expect(parent.test_true._componentable_container).to_not include(:item1)
+            parent.add_test_true(:item1)
+            
+            expect(parent.test_true._componentable_container).to include(:item1)
+            expect(parent.test_true._componentable_container[:item1]).to be_a(Origen::Component::Default)
+            expect(parent).to_not respond_to(:item1)
+          end
+          
+          it 'will add accessors when COMPONENTABLE_ADDS_ACCESSORS = true and :disable_componentable_accessors is not set, but cease adding them if disable_accessors becomes set' do
+            parent = ComponentableSpec::ComponentableAccessorTestParents::Parent.new
+            expect(parent.test_true._componentable_container).to_not include(:item1)
+            parent.add_test_true(:item1)
+            expect(parent).to respond_to(:item1)
+            
+            parent.define_singleton_method(:disable_componentable_accessors) { true }
+            parent.add_test_true(:item2)
+            expect(parent).to_not respond_to(:item2)          
+          end
+          
+          it 'will add accessors depending on the result of the parent :disable_componentable_accessors method' do
+            parent = ComponentableSpec::ComponentableAccessorTestParents::ParentDisableAccessorsMethod.new
+            expect(parent.test_true._componentable_container).to_not include(:item1)
+            parent.add_test_true(:item1)
+            
+            expect(parent.test_true._componentable_container).to include(:item1)
+            expect(parent.test_true._componentable_container[:item1]).to be_a(Origen::Component::Default)
+            expect(parent).to_not respond_to(:item1)
+            
+            parent.add_test_component(:item1)
+            expect(parent.test_component._componentable_container).to include(:item1)
+            expect(parent.test_component._componentable_container[:item1]).to be_a(Origen::Component::Default)
+            expect(parent).to respond_to(:item1)
+          end
+          
+          it 'complains if a method Componentable is trying to add alredy exist' do
+            parent = ComponentableSpec::ComponentableAccessorTestParents::Parent.new
+            parent.add_test_true(:item1)
+            
+            expect { parent.add_test_component(:item1) }.to raise_error Origen::Componentable::NameInUseError, /Method :item1 already exists on object ComponentableSpec::ComponentableAccessorTestParents::Parent!/
+          end
+        end
       end
      
       describe 'listing and getting test_components' do
@@ -695,12 +907,8 @@ fdescribe 'Componentable' do
         end
         
         it 'gets a listing of component names: list_componentable_tests' do
-          @parent.list_test_components.should == ["item1", "item2", "item3", "item4", "item5"]
+          @parent.list_test_components.should == @parent.test_component._componentable_container.keys
         end
-        
-        #it 'gets a listing of component names: componentable_tests()' do
-        #  @parent.test_components.should == ["item1", "item2", "item3", "item4", "item5"]
-        #end
         
         it 'gets a the test component hash: test_components()' do
           expect(@parent.test_components).to eql @parent.test_component._componentable_container
@@ -711,7 +919,7 @@ fdescribe 'Componentable' do
         end
         
         it 'gets a listing of component names: componentable_test.list' do
-          @parent.test_component.list.should == ["item1", "item2", "item3", "item4", "item5"]
+          @parent.test_component.list.should == @parent.test_component._componentable_container.keys
         end
       end
       
@@ -739,11 +947,11 @@ fdescribe 'Componentable' do
         end
         
         it 'can query for class types: test_component_instances_of' do
-          @parent.test_components_of_class(Origen::Component::Default).should == ["item1", "item3", "item4", "item5"]
+          @parent.test_components_of_class(Origen::Component::Default).should == ["item1", "item3", "item4", "item5", "item_block_1", "item_block_2"]
         end
         
         it 'can query for class types: test_components.instances_of' do
-          @parent.test_components_instances_of(ComponentableSpec::AddTest).should == ["item2"]
+          @parent.test_components_instances_of(ComponentableSpec::AddTest).should == ["item2", "item_block_3"]
         end
         
         it 'has :test_components_of_class aliased to :test_components_of_type' do
