@@ -1,0 +1,1000 @@
+% render "layouts/guides.html" do
+
+% require "#{Origen.app.root}/templates/web/lib/optionable"
+% def helper
+%   Origen::WebLib::Optionable
+% end
+
+One thing you might have noticed is that <code>options</code> are everywhere. 
+[Components](<%= path "/guides/models/components" %>) have options, 
+[Subblocks](<%= path "/guides/models/defining/#Adding_Sub_Blocks" %>) have options, the various 
+[Tester Interfaces](<%= path "/guides/program/interface/" %>) have options, lots of things have options!
+
+Options are great; they really are. But, as you add your own classes, plugins, and applications, you
+may face a couple of complications when you start using and customizing your new assets. For example:
+
+* Typos can be deadly, and we've all been there. Few things are worse when trying to track down the elusive
+<code>Undefined method for NilClass</code> error caused by passing <code>my_descriptive_parameter</code> instead
+of the required <code>my_descriptive_param</code>. Or, just not getting the desired behavior and wondering why.
+* Keeping track of all the available options can be a mess. Even when all the options are documented, there's, again,
+chances for typos and miscommunication. There's also the usual case of the assets was updated but the documentation
+was not, leaving the two out of sync.
+
+
+Again, options are great. Not trying to knock the usage of options, but can we do better? Can we make this more
+user friendly?
+
+We can! <code>Origen::Optionable</code> provides just the API to help solve some of these problems.
+
+<code>Optionable</code> provides the <code>Origen::Optionable::Options</code> class. This class will hold all
+of your options and will handle storing, setting, and retrieving them for you.
+
+### Contents
+
+<div>
+  <ol>
+    <li><a href="#The_Basics">The Basics</a></li>
+  </ol>
+</div>
+
+### The Basics: Optionable
+
+#### Registering Options
+
+This is best shown through some examples. <code>Optionable</code> was developed with <code>SubBlock</code>
+instantiation in mind, so consider the subblock:
+
+~~~ruby
+class Demo
+  # This class has the following customizations
+  attr_reader :option1
+  attr_reader :option2
+  attr_reader :option_number
+  attr_reader :option_string
+  attr_reader :option_16bit_int
+  
+  def initialize(options={})
+    # The options will be set to the above attr_readers here
+    @option1 = options[:option1]
+    @option2 = options[:option2]
+    @option_number = options[:option_number]
+    @option_string = options[:option_string]
+    @option_16bit_int = options[:option_16bit_int]
+  end
+  
+end
+~~~
+
+If we wanted to use <code>Optionable</code>, we can register these options. First, we'll need to bring in the
+<code>Optionable</code> module. This will give us the instance method <code>add_optionable</code>, which we can use
+to register new options. We can set the values from the <code>options</code> hash given to the instantiation using
+<code>Optionable's :merge</code> method.
+
+Our <code>Demo</code> class now becomes:
+
+~~~ruby
+class OptionableDemo
+  include Origen::Model
+  include Origen::Optionable
+
+  def initialize(options={})
+    # Register all of the options we have
+    add_optionable(:option1)
+    add_optionable(:option2)
+    add_optionable(:option_number)
+    add_optionable(:option_string)
+    add_optionable(:option_16bit_int)
+    
+    merge_optionable(options)
+  end
+end
+~~~
+
+In the <code>Demo</code> class, we had a list of <code>attr_readers</code> to retreive the values. Those needed to
+be added manually though, so if you forgot to add one, then you don't have an <code>attr_reader</code> for it. To
+avoid populating your class with a every option, <code>Optionable</code> provides a way of getting options. Each of
+these will give you an instance of the <code>Origen::Optionable::Option</code> class. You can see 
+the [Option's API here](),
+but for now we'll stick to just using the <code>:value</code> method.
+
+~~~ruby
+o = OptionableDemo.new(option1: "Option!", option2: "Other Option!")
+
+o.optionable[:option1].value      #=> "Option!"
+o.get_optionable(:option2).value  #=> "Other Option!"
+~~~
+
+But what if we try to access an option that doesn't exists? We'll get an exception:
+
+~~~ruby
+o.optionable[:option3].value #=> Origen::Componentable::NameDoesNotExistError
+~~~
+
+#### Adding Default Values
+
+What if our user doesn't pass in an option that we're expecting? We can set some default values in the
+demo class using the <code>||=</code> syntax, or we can pass in a <code>default</code> value to the
+<code>Option's</code> instantiation:
+
+~~~ruby
+add_optionable(:option1, default: 'Option1')
+add_optionable(:option2, default: 'Option2')
+~~~
+
+Note: there's a corner case here of desiring <code>nil</code> as the default value...
+
+When the option is created, it will be set automatically with the default value:
+
+~~~ruby
+add_optionable(:option1, default: 'Option1')
+optionable[:option1].value #=> 'Option1'
+
+add_optionable(:option2, default: 'Option2')
+optionable[:option2].value #=> 'Option2'
+~~~
+
+##### Advanced Default Values
+
+The above is great... if you want static default values. We'll cover actually setting values later, but having a
+dynamic default value can still be done... statically.
+
+For example, say I have an option, <code>dut_option</code>, which I'm defining as whatever the <code>$dut</code> returns
+when I run <code>$dut.dut_option</code>. In order to use this, I'd have to either have the user pass in this parameter,
+which should be an unnecessary user action, or else set it in the <code>initialize</code> method. One of the points of
+<code>Optionable</code> is ease-of-use and documentation generation. So, the default value can also be a <code>Proc</code>,
+which will dynamically set the default, and will mark the documentation accordingly. We can set the option accordingly:
+
+~~~ruby
+add_optionable(:dut_option, Proc.new { |optionable| $dut.dut_option }
+~~~
+
+As for as documenting go, <code>Optionable</code> isn't smart enough to know what the actual code is, but a
+<code>default_description</code> can be given which you can use to fill in the gaps. <code>Optionable</code> will be
+expecting this, so it will warn if you do not provide one, and some notes in the option's docs will say that this
+field was not filled out.
+
+Note: Like <code>nil</code>, there is a corner case here: you can't actually set a <code>Proc</code> object as a
+default value. If you do, it will think that you intend to run it, not let it set. Like <code>:default_is_nil</code>,
+you can also set a <code>:default_is_proc => true</code> to indicate that you do not want the default <code>Proc</code>
+run to set the default, but actually want the <code>Proc</code> itself to be the default value. Another workaround
+would be to just have a <code>Proc</code> that returns a <code>Proc</code>, but that can get messy and isn't actually
+part of the spec (i.e., there is no regression test for this and its behavior is not guaranteed).
+
+#### Adding Required Options
+
+But, what if we want to require a user to set a particular option? This could be an option that is not generic enough
+to have a default value, but still must be used. We can set the <code>required</code> option to <code>true</code> in
+that case, then we can use the <code>requirements_met?</code> method on the option itself, to check individual options,
+or the same method on the <code>Optionable</code> method to check for all methods:
+
+~~~ruby
+optionable.requirements_met? #=> true if all options marked :required are set. False otherwise.
+# Also aliased as reqs_met?
+~~~
+
+If you want to check the requirements and fail if the requirements are not met, you can use the
+<code>requirements_met!</code> method instead:
+
+~~~ruby
+optionable.requirements_met! #=> true, if all options marked :required are set.
+                             #=> Origen::Optionable::MissingRequirements, otherwise.
+~~~
+
+The above method will take of printing a standardized error message and listing the missing required options. 
+
+What if you want to only require options when other options are set? If you have an option, for example,
+<code>has_clock</code>, which you want set to <code>true</code> or <code>false</code>, then want two other options,
+<code>clock_freq</code> and maybe <code>clock_name</code>, to be required only when <code>has_clock</code> is true,
+that can be done by giving a <code>Hash</code> object where the name of the option is the key and the option's value
+to check for as the value. You can join together more than one codition using multiple keys. These will be the
+joined by the <code>AND</code> condition. For example:
+
+~~~ruby
+add_optionable(:opt)
+add_optionable(:opts_option, required: {opt: nil}
+#=> option :opts_option is only required if :opt was set to anything.
+~~~ruby
+
+~~~ruby
+add_optionable(:opt)
+add_optionable(:opts_option, required: {opt: :case1}
+#=> option :opts_option is only required if :opt is set the value :case1
+
+add_optionable(:opts_other_option, required: {opt: :case1
+#=> option :opts_other_option is only required only if 
+
+~~~
+
+The craziness above is really just to help with the documentation generator (see [here]()).
+Its common on only need certain options to be required when some other option(s) is/are set to some value(s). The
+approach above simplifies these particular cases.
+
+However, this has several shortcomings. Most notably, you're stuck with the <code>AND</code> condition and you're
+stuck with <code>is equal to</code> a single value. To compensate,
+<code>required</code> also accepts a <code>Proc</code> which will be given the option's <code>name</code> and the
+<code>optionable</code> object and can run any kind of requirement condition you want. For example, if you only want
+to require an option if some other option is not set, you can do this as:
+
+~~~ruby
+add_optionable(:opt)
+add_optionable(:opts_option, required: Proc.new { |name, optionable| optionable[:opt].value ? false : true}
+#=> :opts_option is only required if :opt is not set to something.
+~~~
+
+Note: As mentioned, there's no way to auto-document this requirement clause, except to say 'custom user Proc', or
+something to that effect. To provide more details, you can set a the Option's option <code>:requirement_description</code>
+to document. This works the same as <code>:description</code>, discussed in the 
+<a href=''>documentation generator section</a>.
+
+#### Required and Default Interactions
+
+By the way we'ved defined <code>required</code>, it will only check for if an option has <i>some</i> value. This means
+that default values, will satisify the <code>required</code> condition.
+
+#### Setting Options
+
+Thus far we've covered registering options that the including class is able to accept, setting up any default values,
+and indicating whether we're expecting certain options to be set or not. Now, we'll cover how to actually set the
+option values.
+
+##### Setting Options One-By-One
+
+You can set each option individually buy grabbing the <code>Option</code> and using the <code>:set</code> method.
+
+~~~ruby
+# Add a new option
+add_optionable(:opt)
+
+optionable[:opt].set('value')
+~~~
+
+You can also use the <code>set_optionable</code> method to do the same:
+
+~~~ruby
+set_optionable(:opt, 'value')
+~~~
+
+Trying to set an unknown option results in an exception:
+
+~~~ruby
+set_optionable(:unknown, 'value')
+  #=> UnknownOptionError
+  #=> "Option :unknown is not a registered option!"
+~~~
+
+Like with setting the default values, the [option's criteria]()
+will come into play every time the value is set.
+
+##### Merging Options
+
+As shown in the [Registering Options]()
+page, we can use the method <code>optionable.merge(options_to_merge)</code> to mass-set <code>optionable</code> from
+a <code>Hash</code>. The common use case is to take the <code>initialization options</code> and use them to set
+the <code>Optionable options</code>:
+
+~~~ruby
+class MergeDemo
+  include Origen::Model
+  include Origen::Optionable
+  
+  def initialize(options={})
+    add_optionable(:option1, default: 'no value')
+    add_optionable(:option2, default: 'no value')
+    add_optionable(:option3, default: 'no value')
+    
+    merge_optionable(options)
+  end
+  
+  def option_values
+    puts "Option 1: #{optionable[:option1].value}"
+    puts "Option 2: #{optionable[:option2].value}"
+    puts "Option 3: #{optionable[:option3].value}"
+  end
+end
+
+demo = MergeDemo.new
+demo.option_values
+  #=> "Option 1: no value"
+  #=> "Option 2: no value"
+  #=> "Option 3: no value"
+
+demo = MergeDemo.new(option1: 'opt_1', option2: 'opt_2')
+demo.option_values
+  #=> "Option 1: opt_1"
+  #=> "Option 2: opt_2"
+  #=> "Option 3: no value"
+~~~
+
+<code>:merge</code> is essentially the same just <code>optionable.set</code> in a loop for each <code>key-value pair</code>.
+Each option's value will be criteria-checked. In addition, <code>:merge</code> will check that all required options
+are set. If not, it will raise an exception. If you do not want this, you can pass in the <code>:requirements_check</code>
+and set it to <code>false</code>. Note that for this option, <code>nil</code> will actually resolve to <code>true</code>,
+so it must be set explicitly to <code>false</code>.
+
+So, if we mended the <code>MergeDemo</code> to instead have:
+
+~~~ruby
+add_optionable(:option3, required: true) 
+~~~
+
+Running the above would actually give us:
+
+~~~ruby
+demo = MergeDemo.new
+  #=> Origen::Optionable::RequiredOptionsNotMet
+  
+demo = MergeDemo.new(option3: 'opt_3')
+demo.option_values
+  #=> "Option 1: no value"
+  #=> "Option 2: no value"
+  #=> "Option 3: opt_3"
+~~~
+
+But, we can pass in <code>requirements_check: false</code> to <code>:merge</code> internally if we do not want
+to check for required options.
+
+~~~ruby
+merge_optionable(options, requirements_check: false)
+~~~
+
+~~~ruby
+demo = MergeDemo.new
+demo.option_values
+  #=> "Option 1: no value"
+  #=> "Option 2: no value"
+  #=> "Option 3: no value"
+  
+demo = MergeDemo.new(option3: 'opt_3')
+demo.option_values
+  #=> "Option 1: no value"
+  #=> "Option 2: no value"
+  #=> "Option 3: opt_3"
+~~~
+
+Lastly, <code>:merge</code> will check for extra options given, and will raise an exception if an unknown option is
+given. For example:
+
+~~~ruby
+demo = MergeDemo.new(option4: 'opt_4')
+  #=> Origen::Optionable::Error
+  #=> "Cannot merge option :option4, no option named :option4 has been registered!"
+~~~
+
+Like checking for requirements, this can be disabled by setting <code>:fail_on_extra_options</code> to <code>true</code>:
+
+~~~ruby
+merge_optionable(options, fail_on_extra_options: false)
+~~~
+
+~~~ruby
+demo = MergeDemo.new(option4: 'opt_4')
+demo.option_values
+  #=> "Option 1: no value"
+  #=> "Option 2: no value"
+  #=> "Option 3: opt_3"
+~~~
+
+Lastly, since <code>default</code> and <code>required</code> parameters could be based on other options, <code>:merge</code>
+will set the options <u>in the order in which they were added to <code>Optionable</code>. Not in the order that the
+user gives them</u>. <code>:merge</code> will resolve the same regardless of how the options are given to it. You can check
+the current merge order using the method <code>:merge_order</code>:
+
+~~~ruby
+optionable.merge_order
+  #=> ['option1', 'option2', 'option3']
+~~~
+
+Notice the switch from symbols to strings (causality of using <code>Hash.with_indifferent_access</code>. You can see
+the note on this in the [Componentable]()
+docs.
+
+#### Option Criteria
+
+Sometimes, you'll want to constrict the values that an option can be. For example, if you're expect an option to be
+the channel to perform an ADC measurement on (a device-specific option), you'll probably want the option to complain if its
+value gets set to <code>"hi"</code>. In fact, you'll probably want to it to complain if it gets set to anything other
+than an Integer. Even then, an integer is pretty broad itself. A value of <code>9,999</code> will be as meaningless as if the option
+was set to <code>"hi"</code>.
+
+An option can be given two additional parameters that will define its acceptable values. For our exampe above, if you're
+expect no device to have over 4 channels and for it to be an integer, you can setup an option as:
+
+~~~ruby
+add_optionable(:adc_channel, accepted_values: [1, 2, 3, 4], accepted_classes: Integer)
+~~~
+
+Both <code>accepted_values</code> or <code>accepted_classes</code> can accept an array of values, or a single value.
+For example, if you wanted to accept the class <code>String</code> as well, you could edit <code>accepted_classes</code>
+to be <code>[Integer, String]</code>. <code>acceped_classes</code> expects the <code>class object</code> to be used, so
+something like <code>[Array, Hash]</code> or just <code>Array</code> is fine.
+
+However, there's a corner case where <code>Arrays</code> are used with <code>accepted_values</code> to address. For example:
+
+~~~ruby
+add_optionable(:never_accept_anything, accepted_values: [])
+~~~
+
+will never work, as the list of <code>accepted_values</code> is empty. However, if you wanted to accept an Array of 
+Array values, they would just need to be nested. For example, the following would only accepted an empty Array as
+an acceptable value:
+
+~~~ruby
+add_optionable(:only_accepted_an_empty_array, accepted_values: [[]])
+~~~
+
+The benefits of using this are:
+
+1. These checkers will be invoked automatically for every option. No extra work needs to be done by you other than
+filling them in.
+2. These checkers will display consistent error messages.
+3. These checkers can be automatically documented by the documentation generator.
+
+##### Custom Checkers
+
+The above is great for simple options that do not require any complex checkers. But what if you need something more
+complex? You can supply an <code>accepted_checker</code> to the option's instantiation which will be run to perform
+any checks that you want. This process will be given the name of the option, and the <code>optionable</code> object
+it would be added to. This process should return <code>true</code>, if the value is acceptable, or <code>false</code>,
+in which case an <code> will be thrown, with a generic message:
+
+~~~ruby
+add_optionable(:proc_ex, accepted_value: Proc.new { |value, optionable| value == true })
+
+optionable.set(:proc_ex, true)
+  #=> true
+
+optionable.set(:proc_ex, false)
+  #=> AcceptedCheckerFailed
+  #=> Value 'false' failed to pass the given checker!
+~~~
+
+Documenting these is a bit trickier. Since <code>Optionable</code> actually get the code and analyze it, you'll have to
+put in your own documentation stating what this checker does and how to satisfy it. You could have a checker that will
+always fail if the user tries to set it on Fridays after 5:00 PM:
+
+~~~ruby
+add_optionable(:proc_ex, 
+  accepted_checker: proc do |value, optionable|
+    t = Time.new
+    if t.friday? && t.hour > 17 # military time
+      false
+    else
+      true
+    end
+  end
+)
+~~~
+
+This is a case where simply saying <code>"The value failed the custom checker"</code> will not offer any guidance as to
+what went wrong. To make matters clearer, you can through the same error <code>Optionable</code> would throw, but with
+a custom message:
+
+~~~ruby
+add_optionable(:proc_ex, 
+  accepted_checker: proc do |value, optionable|
+    t = Time.new
+    if t.friday? && t.hour > 17 # military time
+      raise Origen::Optionable::AcceptedCheckerFailed, "It is after 5:00 PM on Friday. No setting this option during this time."
+    else
+      true
+    end
+  end
+)
+~~~
+
+Likewise, you can add some verbage discussing what this checker and how to satisfy it, which will be added to the
+documentation generator:
+
+~~~ruby
+add_optionable(:proc_ex, 
+  accepted_checker: proc do |value, optionable|
+    t = Time.new
+    if t.friday? && t.hour > 17 # military time
+      raise Origen::Optionable::AcceptedCheckerFailed, "It is after 5:00 PM on Friday. No setting this option during this time."
+    else
+      true
+    end
+  end,
+  accepted_checker_description: "Accepts any value unless it is set after 5:00 PM on Fridays.",
+)
+~~~
+
+##### Checker Ordering
+
+The checkers will always be run in the same order:
+
+1. <code>accepted_classes</code>
+2. <code>accepted_checker</code>
+3. <code>accepted_values</code>
+
+The idea is that checking for a straight values will always fail if the class is incorrect. Likewise, a custom
+checker may fail with other exceptions if incorrect classes are used. Mostly likely, a custom checker along with
+an <code>accepted_values</code> checker is most likely overkill, but could be used to provide additional
+granularity, if desired.
+
+#### Other Operations
+
+As part of <code>Componentable</code>, <code>Optionable</code> comes with some other useful methods for removing,
+listing, and iterating over the avaliable options. Assuming we're starting with:
+
+~~~ruby
+class Demo
+  include Origen::Model
+  include Origen::Optionable
+  
+  def initialize
+    add_optionable(:demo_1)
+    add_optionable(:demo_2)
+    add_optionable(:demo_3)
+  end
+end
+
+demo = Demo.new
+~~~
+
+##### Listing Available Options
+
+~~~ruby
+demo.list_optionables
+  #=> ['demo_1', 'demo_2', 'demo_3']
+~~~
+
+##### Iterating Over Options
+
+~~~ruby
+demo.each_optionable do |option_name, option|
+  # ...
+end
+~~~
+
+##### Removing Single Options
+
+~~~ruby
+demo.remove_optionables(:demo_1)
+#=> Option
+
+demo.list_optionables
+  #=> ['demo_2', 'demo_3']
+~~~
+
+##### Removing All Options
+
+~~~ruby
+demo.remove_all_optionables
+  #=> [Option, Option]
+
+demo.list_optionables
+  #=> []
+~~~
+
+#### Option Class
+
+### Generating Documentation
+
+One of the functions of <code>Optionable</code> is to help keep what's actually in the code in sync with what is
+in the documentation. <code>Optionable::OptionHandler</code> has a method to generate an HTML string that can easily
+be embedded into the documentation.
+
+For example, if you have the options setup as:
+
+~~~ruby
+optionhandler = Origen::Optionable::OptionHandler.new
+
+optionhandler.add(item1: {default: "String Value", accepted_classes: [String, Symbol], description: "Item 1"})
+optionhandler.add(item2: {default: [], accepted_classes: [Array], description: "Item 2"})
+optionhandler.add(item3: {default: {}, accepted_classes: [Hash], description: "Item 3"})
+~~~
+
+You can load up your application and call the <code>to_html</code> method:
+
+~~~
+optionhandler.to_html
+~~~
+
+To get the following:
+
+% #optionhandler = Origen::Optionable::OptionHandler.new
+% #optionhandler.add(item1: {default: "String Value", accepted_classes: [String, Symbol], description: "Item 1"})
+% #optionhandler.add(item2: {default: [], accepted_classes: [Array], description: "Item 2"})
+% #optionhandler.add(item3: {default: {}, accepted_classes: [Hash], description: "Item 3"})
+
+% demo = helper.demo
+% demo.add_optionable(:item1, default: "String Value", accepted_classes: [String, Symbol], description: "Item 1")
+% demo.add_optionable(:item2, default: [], accepted_classes: [Array], description: "Item 2")
+% demo.add_optionable(:item3, default: {}, accepted_classes: [Hash], description: "Item 3")
+
+<%= demo.optionable.to_html %>
+
+##### Option Groups
+
+The above is sufficient if you don't have that many options to deal with. However, if you have several options or 
+related options, you can use <code>Option Groups</code> to organize the option's menu.
+
+Consider the following options:
+
+~~~ruby
+optionhandler = Origen::Optionable::OptionHandler.new
+
+optionhandler.add(item1_A: {default: "Default", description: "Item 1"})
+optionhandler.add(item2_A: {default: "Default", description: "Item 2"})
+optionhandler.add(item3_A: {default: "Default", description: "Item 3"})
+
+optionhandler.add(item1_B: {default: "Default", description: "Item 1"})
+optionhandler.add(item2_B: {default: "Default", description: "Item 2"})
+
+optionhandler.add(item1_C: {default: "Default", description: "Item 3"})
+~~~
+
+These groups could most easily be split by their suffix, to get three item groups: <code>Items A</code>,
+<code>Items B</code>, and <code>Items C</code>.
+
+Do accomplish this, we will register a new option group on the option handler using the <code>add_option_group</code>
+method:
+
+~~~ruby
+# Define them one by one:
+option_handler.groups.items_a name: 'Items A', description: 'Options concerning Item A'
+option_handler.groups.items_b name: 'Items B', description: 'Options concerning Item B'
+option_handler.groups.items_c name: 'Items C', description: 'Options concerning Item C'
+~~~
+
+Now, we can place the options we've already defined into these groups:
+
+~~~ruby
+# Set a single option
+optionhandler.groups.items_c :item1_C
+
+# Set multiple options at once (Note the usage of an Array, not as multiple arguments
+optionhandler.groups.items_a :item1_A, :item2_A, :item3_A
+optionhandler.groups.items_b :item1_B, :item2_B
+
+# Trying to set an option that has not been added results in an exception
+
+# Trying to set an option that exists but whose item group has not been registered also results in an exception
+~~~
+
+Running the above will generate a one-layer, nested option menu:
+
+% demo = Origen::WebLib::Optionable.demo
+
+% demo.add_optionable(:item1_A, default: "Default", description: "Item 1")
+% demo.add_optionable(:item2_A, default: "Default", description: "Item 2")
+% demo.add_optionable(:item3_A, default: "Default", description: "Item 3")
+% demo.add_optionable(:item1_B, default: "Default", description: "Item 1")
+% demo.add_optionable(:item2_B, default: "Default", description: "Item 2")
+% demo.add_optionable(:item1_C, default: "Default", description: "Item 3")
+
+% demo.optionable.groups.items_a description: 'Options concerning Item A'
+% demo.optionable.groups.items_b description: 'Options concerning Item B'
+% demo.optionable.groups.items_c description: 'Options concerning Item C'
+
+% demo.optionable.groups.items_a :item1_A, :item2_A, :item3_A
+% demo.optionable.groups.items_b :item1_B, :item2_B
+% demo.optionable.groups.items_c :item1_C
+
+<%= demo.optionable.to_html %>
+
+##### Further Nesting Option Groups
+
+The above only has a single-layer, but the only limitation on the number of nested groups is what your screen
+can adequately display.
+
+Option groups can be further nested by supplying an array as the option groups, whose tree will be read from
+the left-hand side to the right-hand side. Consider the following options:
+
+~~~ruby
+optionhandler = helper.demo
+
+optionhandler.add(item1_A_i, default: "Default", description: "Item 1")
+optionhandler.add(item2_A_ii, default: "Default", description: "Item 2")
+optionhandler.add(item3_A_ii, default: "Default", description: "Item 3")
+optionhandler.add(item4_A_ii, default: "Default", description: "Item 3")
+
+optionhandler.add(item1_B_i, default: "Default", description: "Item 1")
+optionhandler.add(item2_B_i, default: "Default", description: "Item 2")
+optionhandler.add(item3_B_ii, default: "Default", description: "Item 1")
+optionhandler.add(item4_B_ii, default: "Default", description: "Item 2")
+
+optionhandler.add(item1_C: {default: "Default", description: "Item 3"})
+~~~
+
+Now it may make sense to first group them by letter, then by roman numeral. Using arrays as read
+from left to right, we can define the option groups as:
+
+~~~ruby
+option_handler.add_option_group("Items A", description: "Options concerning Item A")
+option_handler.add_option_group("Items B", description: "Options concerning Item B")
+option_handler.add_option_group("Items C", description: "Options concerning Item C")
+
+option_handler.add_option_group(["Items A", "Items i"], description: "Options concerning Item A, i")
+option_handler.add_option_group(["Items A", "Items ii"], description: "Options concerning Item A, ii")
+option_handler.add_option_group(["Items B", "Items i"], description: "Options concerning Item B, i")
+option_handler.add_option_group(["Items B", "Items ii"], description: "Options concerning Item B, ii")
+option_handler.add_option_group(["Items C"], description: "Options concerning Item C")
+~~~
+
+Then, add the options:
+
+~~~ruby
+optionhandler.groups.items_1 description: 'Options concerning Item 1'
+optionhandler.groups.items_2 description: 'Options concerning Item 2'
+
+optionhandler.groups.items_1.items_a description: 'Options concerning Item 1: A'
+optionhandler.groups.items_1.items_b description: 'Options concerning Item 1: B'
+optionhandler.groups.items_1.items_c description: 'Options concerning Item 1: C'
+optionhandler.groups.items_2.items_a description: 'Options concerning Item 2: A'
+optionhandler.groups.items_2.items_b description: 'Options concerning Item 2: B'
+
+optionhandler.groups.items_1.items_a :item1_A_i, :item1_A_ii, :item1_A_iii
+optionhandler.groups.items_1.items_b :item1_B_i, :item1_B_ii
+optionhandler.groups.items_1.items_c :item1_C
+optionhandler.groups.items_2.items_a :item2_A_i
+optionhandler.groups.items_2.items_b :item2_B_i, :item2_B_ii, :item2_B_iii
+~~~
+
+To get the following nested menu:
+
+% demo = Origen::WebLib::Optionable.demo
+% demo.add_optionable(:item1_A_i, default: "Default", description: "Item 1 A: i")
+% demo.add_optionable(:item1_A_ii, default: "Default", description: "Item 1 A: ii")
+% demo.add_optionable(:item1_A_iii, default: "Default", description: "Item 1 A: iii")
+% demo.add_optionable(:item1_B_i, default: "Default", description: "Item 2 A: i")
+% demo.add_optionable(:item1_B_ii, default: "Default", description: "Item 2 A: ii")
+% demo.add_optionable(:item1_C, default: "Default", description: "Item 1 C")
+% demo.add_optionable(:item2_A_i, default: "Default", description: "Item 2 A: i")
+% demo.add_optionable(:item2_B_i, default: "Default", description: "Item 2 B: i")
+% demo.add_optionable(:item2_B_ii, default: "Default", description: "Item 2 B: ii")
+% demo.add_optionable(:item2_B_iii, default: "Default", description: "Item 2 B: iii")
+
+% demo.optionable.groups.items_1 description: 'Options concerning Item 1'
+% demo.optionable.groups.items_2 description: 'Options concerning Item 2'
+
+% demo.optionable.groups.items_1.items_a description: 'Options concerning Item 1: A'
+% demo.optionable.groups.items_1.items_b description: 'Options concerning Item 1: B'
+% demo.optionable.groups.items_1.items_c description: 'Options concerning Item 1: C'
+% demo.optionable.groups.items_2.items_a description: 'Options concerning Item 2: A'
+% demo.optionable.groups.items_2.items_b description: 'Options concerning Item 2: B'
+
+% demo.optionable.groups.items_1.items_a :item1_A_i, :item1_A_ii, :item1_A_iii
+% demo.optionable.groups.items_1.items_b :item1_B_i, :item1_B_ii
+% demo.optionable.groups.items_1.items_c :item1_C
+% demo.optionable.groups.items_2.items_a :item2_A_i
+% demo.optionable.groups.items_2.items_b :item2_B_i, :item2_B_ii, :item2_B_iii
+
+<%= demo.optionable.to_html %>
+
+##### Chaining And Retroactively Editing Groups
+
+You can chain group creation together. For example:
+
+~~~ruby
+optionhandler = helper.demo
+
+optionhandler.optionable.groups.items_1.items_a description: 'Options concerning Item 1: A'
+optionhandler.optionable.groups.items_1.items_b description: 'Options concerning Item 1: B'
+optionhandler.optionable.groups.items_2.items_a description: 'Options concerning Item 2: A'
+~~~
+
+Generates this:
+
+% demo = helper.demo
+
+% demo.optionable.groups.items_1.items_a description: 'Options concerning Item 1: A'
+% demo.optionable.groups.items_1.items_b description: 'Options concerning Item 1: B'
+% demo.optionable.groups.items_2.items_a description: 'Options concerning Item 2: A'
+
+<%= demo.optionable.to_html %>
+
+Notice that the groups <code>items_1</code> and <code>items_2</code> have no description (or any other customizations). 
+That is a side effect of creating groups anonymously. However, you can still pass in options to set or change them after
+creation. For example, adding descriptions as below will get us back to what we previously had two examples ago.
+
+~~~ruby
+optionhandler.groups.items_1 description: 'Options concerning Item 1'
+optionhandler.groups.items_2 description: 'Options concerning Item 2'
+~~~
+
+% demo.optionable.groups.items_1 description: 'Options concerning Item 1'
+% demo.optionable.groups.items_2 description: 'Options concerning Item 2'
+
+<%= demo.optionable.to_html %>
+
+##### Leftover Options
+
+The above examples were <i>'all or nothing'</i> with regards to the option groups. Either all the options were placed
+in groups, or none of them were.
+
+If there are no option groups present, then all options will be set on the top <code>OptionHandler</code> object. This is
+fine for just a couple options of course. If you only have five options there's no need to group them. But, what if you
+have 100 options, but only put 99 of them in groups? In this case, a warning will printed that an option has
+not been placed in a group, but it will still be generated, and placed at the <code>OptionHandler's</code> level, in a
+custom group called <code>_leftovers_</code>. See below for an example.
+
+~~~ruby
+% demo = helper.demo
+
+% demo.add_optionable(:itemA_i, default: "Default", description: "Item A: i")
+% demo.add_optionable(:itemA_ii, default: "Default", description: "Item A: ii")
+% demo.add_optionable(:itemA_iii, default: "Default", description: "Item A: iii")
+% demo.add_optionable(:itemB, default: "Default", description: "Item B")
+% demo.add_optionable(:itemC, default: "Default", description: "Item C")
+% demo.add_optionable(:itemD, default: "Default", description: "Item D")
+% demo.add_optionable(:itemE, default: "Default", description: "Item E")
+% demo.add_optionable(:itemF, default: "Default", description: "Item F")
+% demo.add_optionable(:itemG, default: "Default", description: "Item G")
+~~~
+
+The above will generate the following:
+
+<%= demo.optionable.to_html %>
+
+However, what if you have 100 options, and 90 of them are drastically different from one another but 10 are grouped
+together? You can pass in a option <code>:leftovers</code> to define what to do with them. This can be either a
+<code>OptionGroup</code> object (i.e., place leftoever options in this group), or a process, which is given
+the <code>option_name</code> and expected an <code>OptionGroup</code> to be returned.
+
+This will both place the options in the returned group, and suppress the warnings, as <code>OptionHandler</code> now
+has instructions for how to handle leftovers.
+
+See below for two examples of using this.
+
+ADD EXAMPLES
+
+<%= demo.optionable.to_html %>
+
+<%= demo.optionable.to_html %>
+
+Not returning an option group will result in an exception.
+
+ADD EXAMPLE
+
+##### Setting Development Verbosity
+
+#### Other Customizations
+
+Most of these other customizations will not be needed for general purpose usage, or can be
+used in a much simpler form. However, it may also be that you wish to generate multiple times,
+possibly for the options pertaining to different roles, or generate in multiple webpages, again,
+pertaining to different roles and usages.
+
+In those cases, there are some methods that can be used to programaticaly influence 
+[which options will actually be printed during web generation](),
+[the order in which they appear](),
+[and whether or not the groups should be collapsed or expanded]().
+
+##### Enabling And Disabling Individuals
+
+##### Ordering
+
+There are three topics that will be discussed here, and you can jump to:
+
+- Ordering Between Groups
+- Ordering Between Options Within A Group
+- Ordering Between Options And Groups Within a Group
+
+###### Ordering Between Groups
+
+The default generation order will be the order in which they were added. However, there may be times that you
+want to move around the generation order. This can be done by using the <code>_shift_group_up</code>
+and the <code>_shift_group_down</code> methods.
+
+Underneath, the group list is stored in an array. You can get this array directly to check the generation
+order using the <code>_groups</code> method.
+
+Danger! You can edit this array directly if you want. Methods like <code>:sort</code> will work, but if
+groups are accidentally removed or added, it will cause problems with the generation. So be careful!
+
+~~~ruby
+
+# Shift group up
+
+# Shift gruop down
+
+# Shift groups up
+
+# Shift groups down
+
+# Exception is raised if the groups haven't been added
+
+# If the first item to shift up is already the top, and the second item to shift up is
+# the second item, it will become the first item.
+
+~~~
+
+Note: there is currently no way to optimize the ordering of multi-level groups. That is, there is no
+API to order, say, <code>ItemB</code> before <code>ItemA</code> while also ordering the groups in
+<code>ItemB</code> in a single command. Those need to be separate commands.
+
+###### Ordering Between Options Within A Group
+
+Like the groups above, the default order is of the options is in the order that they are added to
+the group. Similar method exists to move the options within a group around:
+
+~~~ruby
+
+# Shift group up
+
+# Shift gruop down
+
+# Shift groups up
+
+# Shift groups down
+
+# Exception is raised if the groups haven't been added
+
+# If the first item to shift up is already the top, and the second item to shift up is
+# the second item, it will become the first item.
+
+~~~
+
+###### Ordering Between Options And Groups Within a Group
+
+By default, options will be printed first, followed by the groups. If you just want to reverse (or confirm)
+this order, you can pass in the parameter <code>order: :options_first</code> or <code>order: :groups_first</code>.
+
+You can see the current order using <code>:_order</code> method. The order will most likely be one of the two
+symbols above. However, you can call the method <code>:_generate_order</code> to populate <code>:_order</code>
+with the actual values they will resolve to. Then, you can use the <code>:_shift_order_up</code> and 
+<code>:_shift_order_down</code> in the same way as the groups and options to move this order around as well.
+
+Note: that <code>:_order</code> is a Hash, and not an Array.
+
+Note: if <code>:_order</code> is used, both the <code>:_groups</code> and <code>:_options</code> are
+ignored.
+
+Note: additional groups or options added after <code>:_generate_order</code> has been called are appended to the end.
+
+Note: In the corner case of a group and an option both having the same name, the option will be
+printed first. You can get around this by instead of providing just the name, providing either
+the option or the group instance instead.
+
+##### Collapsed Or Expanded?
+
+By default, all options and groups will start collapsed. However, you can pass in the parameter
+<code>:start_expanded</code> as either <code>true</code> or <code>false</code>.
+
+#### Caveats
+
+Under the hood of the web documentation engine, <code>Optionable</code> uses 
+[Boostrap v3](https://getbootstrap.com/docs/3.3/getting-started/),
+and under the hood of <code>bootstrap</code>, [Href]()
+tags are used to link and get the collapsable behavior. Normally, all will go as expected, but there's some
+things that you need to watch for if you're going to be fancy.
+
+##### Using Multiple OptionHandler Objects
+
+The generated HREFs are tied to the object ID of the <code>OptionHandler</code> doing the generation. So, having multiple
+<code>OptionHandler</code> generations on a single webpage is fine (as demonstrated by this webpage, in fact).
+
+##### Generating a Single OptionHandler Multiple Times
+
+Under the hood of <code>bootstrap</code>, the collapse-expand before is achieved through <code>href</code> tags that link
+back to the webpage object to change.
+
+To handle this case, the <code>to_html</code> methods will auto-inject a 16-bit random number to append to the objects
+that will exhibit the collapsable behavior. So, generating the same <code>OptionHandler's</code> html won't be a problem.
+
+Where this does become a problem is in <code>examples</code> or <code>specs</code> where you may be trying to regression
+test your website. With the random numbers appearing all over the place, performing a straight comparision is tricky. To
+overcome this, you can provide an option <code>:collapse_id</code> to bypass the random number generation and use your own
+number, essentially seeding the random value yourself. For example:
+
+~~~ruby
+~~~
+
+Generates this:
+
+ADD HERE
+
+However, if we generate this again, you'll notice it doesn't work. Try using the one below. The object won't behave
+correctly, but it will collapse/expand the one above it, which has the same <code>collapse_id</code>.
+
+ADD HERE
+
+The only known purpose for this is <code>examples</code> or <code>specs</code> testing. In practice, using this
+should be avoided.
+
+##### Multiple OptionHandlers With the Same Option Objects
+
+
+% end

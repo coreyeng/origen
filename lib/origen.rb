@@ -792,4 +792,5 @@ unless defined? RGen::ORIGENTRANSITION
   include Origen::GlobalMethods
 
   require 'origen/components'
+  require 'origen/optionable'
 end
