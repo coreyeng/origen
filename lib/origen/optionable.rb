@@ -118,7 +118,7 @@ module Origen
       
     	def to_html(options={})
     	  #panel_name = (options[:panel_name] || ("Options for #{parent}" if parent) || 'Optionable Options') + ' (Click To Expand)'
-    	  panel_name = "Top Panel (Fix this)"
+    	  panel_name = options.delete(:title) || "#{Origen.app.namespace} Options"
     	  collapse_id = options[:collapse_id] || Random.rand(1..2**16)
     	  propogate_collapse_id = options[:propogate_collapse_id] || false
     	  
@@ -131,7 +131,12 @@ module Origen
     	  html << '      </h4>'
     	  html << '    </div>'
 
-    	  html << '    <div id="optionable_' + "#{collapse_id}" + '" class="panel-collapse collapse">'
+        #collapse = groups.start_collapsed
+     	  if options.delete(:top_starts_collapsed).is_a?(FalseClass) || options[:start_collapsed].is_a?(FalseClass)
+    	    html << '    <div id="optionable_' + "#{collapse_id}" + '" class="panel-collapse collapse in">'
+    	  else
+    	    html << '    <div id="optionable_' + "#{collapse_id}" + '" class="panel-collapse collapse">'
+    	  end
     	  html << '      <ul class="list-group">'
     	  
     	  # Keep track of which options we've seen and which ones we haven't.
@@ -162,6 +167,10 @@ module Origen
     	  
     	  html.join("\n")
     	end
+
+      def generate_docs(options={})
+        to_html(options)
+      end
 
     end
     

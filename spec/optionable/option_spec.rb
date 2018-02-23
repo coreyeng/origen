@@ -99,19 +99,29 @@ RSpec.shared_examples :optionable_option do
         end
         
         it 'complains if the default Proc does not meet the :accepted_classes criteria' do
-          fail
+          expect {
+          }.to raise_error Origen::Optionable::UnacceptedClassError, /Error in option test when setting default value from Proc object: Value's class 'String' is not accepted for option 'test'/
         end
         
         it 'complains if the default Proc does not meet the :accepted_values criteria' do
-          fail
+         expect {
+         }.to raise_error Origen::Optionable::UnacceptedValueError, /Error in option test when setting default value from Proc object: Value 'hello option!' is not accepted for option 'test'/
         end
         
         it 'complains if the default Proc does not meet the :accepted_checker criteria' do
-          fail
+          expect {
+          }.to raise_error Origen::Optionable::AcceptedCheckerFailed, /Error in option test when setting default value from Proc object: Value 'hello option!' failed to pass the given checker!/
         end
         
         it 'runs the checkers in the following order: accepted_classes, accepted_checker, accepted_values' do
-          fail
+          expect {
+          }.to raise_error Origen::Optionable::UnacceptedClassError
+          
+          expect {
+          }.to raise_error Origen::Optionable::AcceptedCheckerFailed
+          
+          expect {
+          }.to raise_error Origen::Optionable::UnacceptedValueError
         end
         
         it 'complains if :default and :default_is_nil are both set' do

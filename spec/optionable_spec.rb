@@ -42,6 +42,12 @@ fdescribe 'Optionable Spec' do
   # This is just checking that the Componentable/Optionable interaction is working.
   # The actual testing of Optionable::Option and Optionable::Group are in the optionable/ directory.
   describe 'accessing the underlying :optionable class' do
+    [:add_option, :set_option, :remove_option, :list_options, :generate_options_html].each do |method|
+      it "adds the Optionable API: #{method}" do
+        expect(@optionable_test).to respond_to(method)
+      end
+    end
+
     context 'with dummy Optionable includer' do
       it 'can access the optionable class' do
         o = OptionableSpec.new_optionable_class
