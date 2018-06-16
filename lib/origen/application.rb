@@ -913,5 +913,39 @@ END
         $LOAD_PATH.unshift(path.to_s) if File.exist?(path) && !$LOAD_PATH.include?(path.to_s)
       end
     end
+
+    def commands
+      fail 'not implemented yet!'
+    end
+
+    def application_commands
+      fail
+    end
+    alias_method :app_commands, :application_commands
+
+    def plugin_commands
+      fail
+    end
+
+    def global_commands
+      fail
+    end
+
+    def command_launcher
+      if self.command_launcher?
+        Pathname.new("#{root}").join(self.config.shared[:command_launcher])
+      else
+        nil
+      end
+    end
+
+    def has_command_launcher?
+      !self.config.command_launcher.nil?
+    end
+    alias_method :command_launcher?, :has_command_launcher?
+
+    def command_launcher_exists?
+      fail
+    end
   end
 end
